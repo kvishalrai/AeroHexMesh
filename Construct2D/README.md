@@ -35,6 +35,22 @@ make
 
 See `INSTALL` and `doc/user_manual.pdf` for full build and usage details.
 
+## Example: batch-mode grid generation
+
+Construct2D is normally an interactive menu program, but it auto-loads
+settings from a `grid_options.in` file in the working directory if one's
+present, so it can be driven non-interactively too:
+
+```bash
+./generate_naca0012_ogrd.sh        # -> naca0012.p3d/.nmf (O-grid, 128x65)
+./generate_naca0012_sharp_cgrd.sh  # -> naca0012_sharp.p3d/.nmf (C-grid, 179x65)
+```
+
+Each script writes its own `grid_options.in`, builds `construct2d` if
+missing, and pipes the minimal menu sequence (`GRID` → `SMTH` → `QUIT`)
+needed to generate and save a grid. Read either one as a template for
+generating a mesh from a different airfoil `.dat` file.
+
 ## Full-domain view
 
 <table>
