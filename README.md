@@ -37,7 +37,7 @@ own README for the details of that pipeline's stages.
 
 | Path | What it is |
 |---|---|
-| `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See [Credits](#credits). |
+| `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See its own [README](Construct2D/README.md) and [Credits](#credits). |
 | `Construct2D_to_SOD2D/` | 2D grid → smoothed high-order mesh for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](Construct2D_to_SOD2D/README.md). |
 
 Additional `Construct2D_to_<SOLVER>/` pipelines (e.g. Nek5000/NekRS) may be

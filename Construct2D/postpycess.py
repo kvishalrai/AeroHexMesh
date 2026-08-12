@@ -906,4 +906,5 @@ def plot_surface(x, y, plaincolor=None, topcolor=None, botcolor=None,
 ################################################################################
 
 # Run main program
-main()
+if __name__ == '__main__':
+  main()
