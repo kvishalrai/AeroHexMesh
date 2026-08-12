@@ -92,6 +92,14 @@ authors:
   Argonne National Laboratory / Nek5000 contributors) — an algorithmic
   reference, not vendored code.
 
+## Development
+
+Substantial parts of this repository — the mesh-generation pipeline scripts,
+the wall-boundary elasticity fix in `MeshElasticitySolver.f90`, and this
+documentation — were developed with assistance from
+[Claude Code](https://claude.com/claude-code) (Anthropic), working under
+Vishal Kumar's direction and review.
+
 ## License
 
 Code original to this repository is released under the MIT License (see
