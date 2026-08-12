@@ -1,5 +1,7 @@
 # AeroHexMesh
 
+*Aerodynamics with Hexahedral Meshes*
+
 A framework for generating high-order, spanwise-extruded 3D meshes (O-grid or
 C-grid) for spectral-element CFD solvers, starting from a 2D
 [Construct2D](https://sourceforge.net/projects/construct2d/) grid. Although
