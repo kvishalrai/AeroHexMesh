@@ -1,0 +1,60 @@
+{
+   "type":"BluffBodySolverIncomp",
+
+   "mesh_h5_file_path":"",
+   "mesh_h5_file_name":"naca_c",
+
+   "results_h5_file_path":"",
+   "results_h5_file_name":"results",
+
+   "final_istep":1000001,
+   "doGlobalAnalysis":true,
+   "doTimerAnalysis":true,
+
+   "save_logFile_first":1,
+   "save_logFile_step":10,
+
+   "save_resultsFile_first":1,
+   "save_resultsFile_step":100000,
+
+   "save_restartFile_first":1,
+   "save_restartFile_step":1000,
+
+   "loadRestartFile":false,
+   "restartFile_to_load":2,
+
+   "continue_oldLogs":false,
+
+   "saveAvgFile":false,
+   "loadAvgFile":false,
+
+   "saveSurfaceResults":false,
+
+   "flag_type_les":"les_type_vreman",
+
+   "flag_implicit":0,
+   "flag_lps_stab":1,
+
+   "maxIter":20,
+   "tol":1e-3,
+
+   "cfl_conv":0.95,
+
+   "v0":1.0,
+   "delta":1.0,
+   "rho0":1.0,
+   "Re":50000.0,
+   "aoa":5.0,
+
+   "bouCodes":
+   [
+      {"id":1, "bc_type":"bc_type_non_slip_adiabatic"},
+      {"id":2, "bc_type":"bc_type_far_field"},
+      {"id":3, "bc_type":"bc_type_outlet_incomp"}
+   ],
+
+   "buffer":
+   [
+   ]
+
+}

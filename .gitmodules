@@ -1,0 +1,4 @@
+[submodule "Construct2D_to_SOD2D/CFD_code/sod2d_gitlab"]
+	path = Construct2D_to_SOD2D/CFD_code/sod2d_gitlab
+	url = https://gitlab.com/bsc_sod2d/sod2d_gitlab.git
+	branch = 277-witness-points-using-wrong-connectivity

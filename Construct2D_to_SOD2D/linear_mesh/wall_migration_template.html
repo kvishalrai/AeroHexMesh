@@ -1,0 +1,568 @@
+<title>__TITLE__</title>
+<style>
+  :root {
+    --bg: #12161c;
+    --surface: #1a2029;
+    --card: #202836;
+    --card-border: #2c3646;
+    --text: #e7eaee;
+    --text-muted: #8b93a3;
+    --text-faint: #5b6472;
+    --before: #6fa8c9;
+    --after: #e8935f;
+    --danger: #e0526b;
+    --danger-bg: #3a2028;
+    --ok: #5fbf8f;
+    --grid: #262f3d;
+    --curve: #4a5568;
+    --corner: #c9a875;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="light"]) {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --card: #ffffff;
+      --card-border: #dde1e7;
+      --text: #1a2029;
+      --text-muted: #5b6472;
+      --text-faint: #8b93a3;
+      --before: #2f6f94;
+      --after: #b8622f;
+      --danger: #c23050;
+      --danger-bg: #fbe6ea;
+      --ok: #22855c;
+      --grid: #e3e6ea;
+      --curve: #94a3b8;
+      --corner: #a06a2e;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --card-border: #dde1e7;
+    --text: #1a2029;
+    --text-muted: #5b6472;
+    --text-faint: #8b93a3;
+    --before: #2f6f94;
+    --after: #b8622f;
+    --danger: #c23050;
+    --danger-bg: #fbe6ea;
+    --ok: #22855c;
+    --grid: #e3e6ea;
+    --curve: #94a3b8;
+    --corner: #a06a2e;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 100vh;
+  }
+
+  header { display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .sub { color: var(--text-muted); font-size: 14px; line-height: 1.5; max-width: 720px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    max-width: 1100px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat .label {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .stat .value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .stat.danger { border-color: var(--danger); background: var(--danger-bg); }
+  .stat.danger .value { color: var(--danger); }
+  .stat .hint { font-size: 12px; color: var(--text-muted); }
+
+  .callout {
+    max-width: 1100px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .callout strong { color: var(--danger); }
+  .callout code {
+    font-family: var(--mono);
+    background: rgba(0,0,0,0.15);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    min-height: 560px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .controls .group { display: flex; align-items: center; gap: 8px; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .controls input[type="range"] { width: 140px; accent-color: var(--after); }
+  .controls .val { font-family: var(--mono); color: var(--text); min-width: 3.5em; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+  .legend .swatch { display: flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  button {
+    font-family: var(--sans);
+    font-size: 12px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--after); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--after); outline-offset: 2px; }
+
+  #plotWrap {
+    position: relative;
+    flex: 1;
+    border-radius: 8px;
+    background: var(--bg);
+    overflow: hidden;
+    cursor: grab;
+  }
+  #plotWrap.grabbing { cursor: grabbing; }
+  svg { display: block; width: 100%; height: 100%; }
+
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre;
+    opacity: 0;
+    transition: opacity 0.08s ease;
+    z-index: 10;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  }
+  #tooltip .k { color: var(--text-faint); }
+  #tooltip .hi { color: var(--danger); }
+
+  footer { font-size: 11.5px; color: var(--text-faint); max-width: 900px; line-height: 1.6; }
+</style>
+
+<header>
+  <div class="eyebrow">MeshElasticitySolver &middot; parametric (arc-length) wall-spline smoothing</div>
+  <h1>__TITLE__</h1>
+  <div class="sub">Every airfoil-wall node's position before and after the wall-spline smoothing pass &mdash; each node placed directly by arc-length interpolation, no nearest-point search &mdash; __MESH_LABEL__, plotted against the fitted natural-cubic-spline curve and its __N_CORNERS__ original linear corner points (corner 1 and __N_CORNERS__ are the same trailing-edge point, closing the loop). Both dots always sit at their true, unexaggerated positions &mdash; after-dots should land exactly on the curve. Only the connecting LINE's length is exaggerated by the slider below, to make a real displacement of a fraction of a percent of chord visible at all.__MINQ_NOTE__</div>
+</header>
+
+<div class="stats" id="stats"></div>
+<div class="callout" id="callout"></div>
+
+<div class="panel">
+  <div class="controls">
+    <div class="group">
+      <label for="exag">Exaggeration</label>
+      <input type="range" id="exag" min="0" max="200" value="40" />
+      <span class="val" id="exagVal">40&times;</span>
+    </div>
+    <div class="group">
+      <label><input type="checkbox" id="onlyMoved" checked /> Only nodes that moved</label>
+    </div>
+    <div class="group">
+      <label><input type="checkbox" id="showCurve" checked /> Fitted spline curve</label>
+      <label><input type="checkbox" id="showCorners" checked /> Original corners</label>
+    </div>
+    <div class="group">
+      <button id="zoomLE">Zoom to leading edge</button>
+      <button id="zoomTE">Zoom to trailing edge</button>
+      <button id="zoomFit">Fit airfoil</button>
+      <button id="zoomReset">Reset</button>
+    </div>
+    <div class="legend">
+      <div class="swatch"><span class="dot" style="background:var(--curve)"></span>spline fit</div>
+      <div class="swatch"><span class="dot" style="background:var(--corner)"></span>corner</div>
+      <div class="swatch"><span class="dot" style="background:var(--before)"></span>before</div>
+      <div class="swatch"><span class="dot" style="background:var(--after)"></span>after</div>
+      <div class="swatch"><span class="dot" style="background:var(--danger)"></span>collision</div>
+    </div>
+  </div>
+  <div id="plotWrap">
+    <svg id="plot" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="tooltip"></div>
+  </div>
+</div>
+
+<footer>
+  Data: <code>wall_coords_before_rank*.dat</code> / <code>wall_coords_after_rank*.dat</code>, dumped directly from <code>MeshElasticitySolver.f90</code> around the elasticity solve. Node coordinates matched by global ID. Scroll or pinch to zoom, drag to pan.
+</footer>
+
+<script>
+const RAW = __DATA__; // [x0,y0,x1,y1,disp,gid]
+const CURVE = __CURVE__; // dense fitted spline samples [[x,y],...]
+const CORNERS = __CORNERS__; // original linear corner points [[x,y],...]
+
+const CELL_HEIGHT = 1.7e-3; // known first-layer wall-normal cell height
+
+function fmt(v, d=6) { return v.toFixed(d); }
+
+// ---- stats ----
+const maxDisp = RAW.reduce((m,r)=>Math.max(m,r[4]), 0);
+const nMoved = RAW.filter(r=>r[4] > 1e-9).length;
+const nOverCell = RAW.filter(r=>r[4] > CELL_HEIGHT).length;
+
+// find collision groups: nodes whose "after" position coincides (within eps) but
+// whose "before" position differs meaningfully
+function keyAfter(r) { return Math.round(r[2]/2e-6) + "," + Math.round(r[3]/2e-6); }
+const afterGroups = {};
+for (const r of RAW) {
+  const k = keyAfter(r);
+  (afterGroups[k] = afterGroups[k] || []).push(r);
+}
+let collision = null;
+for (const k in afterGroups) {
+  const g = afterGroups[k];
+  if (g.length < 2) continue;
+  // distinct "before" positions among this group?
+  const beforeSet = new Set(g.map(r => Math.round(r[0]/1e-5)+","+Math.round(r[1]/1e-5)));
+  if (beforeSet.size >= 2 && g[0][4] > 1e-4) {
+    if (!collision || g[0][4] > collision[0][4]) collision = g;
+  }
+}
+
+document.getElementById('stats').innerHTML = `
+  <div class="stat">
+    <div class="label">Wall nodes</div>
+    <div class="value">${RAW.length.toLocaleString()}</div>
+    <div class="hint">${nMoved.toLocaleString()} moved by smoothing</div>
+  </div>
+  <div class="stat ${maxDisp>CELL_HEIGHT?'danger':''}">
+    <div class="label">Max displacement</div>
+    <div class="value">${maxDisp.toExponential(3)}</div>
+    <div class="hint">chord units</div>
+  </div>
+  <div class="stat ${nOverCell>0?'danger':''}">
+    <div class="label">Exceed cell height</div>
+    <div class="value">${nOverCell}</div>
+    <div class="hint">&gt; ${CELL_HEIGHT.toExponential(1)} (first-layer height)</div>
+  </div>
+  <div class="stat ${collision?'danger':''}">
+    <div class="label">Collisions found</div>
+    <div class="value">${collision ? collision.length+' nodes' : 'none'}</div>
+    <div class="hint">${collision ? '1 shared target point' : 'no target-point overlap'}</div>
+  </div>
+`;
+
+if (collision) {
+  const gids = collision.map(r=>r[5]).join(', ');
+  const tgt = collision[0];
+  document.getElementById('callout').innerHTML =
+    `<strong>Collision detected:</strong> node${collision.length>1?'s':''} <code>gid=${gids}</code> ` +
+    `all map to the same target point <code>(${fmt(tgt[2])}, ${fmt(tgt[3])})</code>, ` +
+    `despite starting from ${collision.length} distinct positions straddling the leading edge ` +
+    `(e.g. <code>(${fmt(collision[0][0])}, ${fmt(collision[0][1])})</code> vs ` +
+    `<code>(${fmt(collision[collision.length-1][0])}, ${fmt(collision[collision.length-1][1])})</code>). ` +
+    `Two physically distinct wall nodes being pulled to one location degenerates the element between them &mdash; the direct cause of the quality collapse.`;
+} else {
+  document.getElementById('callout').style.display = 'none';
+}
+
+// ---- plot ----
+const svg = document.getElementById('plot');
+const NS = "http://www.w3.org/2000/svg";
+const wrap = document.getElementById('plotWrap');
+const tooltip = document.getElementById('tooltip');
+
+// data bounds (in mesh/chord units)
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const r of RAW) {
+  minX = Math.min(minX, r[0], r[2]); maxX = Math.max(maxX, r[0], r[2]);
+  minY = Math.min(minY, r[0]===r[0]?r[1]:r[1], r[3]); maxY = Math.max(maxY, r[1], r[3]);
+}
+const padX = (maxX-minX)*0.06, padY = (maxY-minY)*0.06;
+const dataBox = {x: minX-padX, y: minY-padY, w: (maxX-minX)+2*padX, h: (maxY-minY)+2*padY};
+
+// view state: current viewBox in DATA space (y flipped for screen)
+let view = {x: dataBox.x, y: -(dataBox.y+dataBox.h), w: dataBox.w, h: dataBox.h};
+function applyView() {
+  svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+}
+applyView();
+
+const gGrid = document.createElementNS(NS,'g');
+const gCurve = document.createElementNS(NS,'g');
+const gCorners = document.createElementNS(NS,'g');
+const gLines = document.createElementNS(NS,'g');
+const gBefore = document.createElementNS(NS,'g');
+const gAfter = document.createElementNS(NS,'g');
+svg.appendChild(gGrid); svg.appendChild(gCurve); svg.appendChild(gCorners);
+svg.appendChild(gLines); svg.appendChild(gBefore); svg.appendChild(gAfter);
+
+let showCurve = true, showCorners = true;
+function rebuildStaticLayers() {
+  updateStrokeScale();
+  gCurve.innerHTML = '';
+  if (showCurve) {
+    const pts = CURVE.map(([x,y]) => `${x},${-y}`).join(' ');
+    const poly = document.createElementNS(NS,'polyline');
+    poly.setAttribute('points', pts);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', 'var(--curve)');
+    poly.setAttribute('stroke-width', 1.4 * strokeScale);
+    poly.setAttribute('stroke-linejoin', 'round');
+    poly.setAttribute('stroke-linecap', 'round');
+    gCurve.appendChild(poly);
+  }
+  gCorners.innerHTML = '';
+  if (showCorners) {
+    const rC = 2.0 * strokeScale;
+    for (const [x,y] of CORNERS) {
+      const c = document.createElementNS(NS,'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', -y);
+      c.setAttribute('r', rC);
+      c.setAttribute('fill', 'none');
+      c.setAttribute('stroke', 'var(--corner)');
+      c.setAttribute('stroke-width', 0.8 * strokeScale);
+      gCorners.appendChild(c);
+    }
+  }
+}
+
+function seqColor(t) {
+  // light amber -> saturated red, t in [0,1]
+  t = Math.max(0, Math.min(1, t));
+  const c0 = [232,197,120], c1 = [224,82,107];
+  const r = Math.round(c0[0]+(c1[0]-c0[0])*t);
+  const g = Math.round(c0[1]+(c1[1]-c0[1])*t);
+  const b = Math.round(c0[2]+(c1[2]-c0[2])*t);
+  return `rgb(${r},${g},${b})`;
+}
+
+let strokeScale = 1; // set from current zoom so marks stay a constant screen size
+function updateStrokeScale() {
+  const rect = wrap.getBoundingClientRect();
+  strokeScale = view.w / Math.max(rect.width, 1);
+}
+
+let exag = 40, onlyMoved = true;
+
+function rebuild() {
+  gLines.innerHTML = ''; gBefore.innerHTML = ''; gAfter.innerHTML = '';
+  updateStrokeScale();
+  rebuildStaticLayers();
+  const r0 = 1.6 * strokeScale;
+  const lw = 1.0 * strokeScale;
+  const isCollisionGid = collision ? new Set(collision.map(r=>r[5])) : new Set();
+
+  for (const row of RAW) {
+    const [x0,y0,x1,y1,d,gid] = row;
+    if (onlyMoved && d <= 1e-9) continue;
+    const ex0 = x0, ey0 = -y0;
+    // The connecting LINE's far end is exaggerated (pushed `exag`x further along
+    // the true before->after direction) purely so a real displacement of a
+    // fraction of a percent of chord is visible at all. The AFTER DOT itself is
+    // always drawn at its true, unexaggerated position (ex1t,ey1t) -- it should
+    // sit exactly on the fitted spline curve, since that's the actual placement
+    // sod2d computed. Only the line overshoots; the dot never does.
+    const dx = (x1-x0)*exag, dy = -(y1-y0)*exag;
+    const ex1 = x0+dx, ey1 = -y0+dy;
+    const ex1t = x1, ey1t = -y1;
+
+    if (d > 1e-9) {
+      const t = Math.min(1, d / (CELL_HEIGHT*1.4));
+      const line = document.createElementNS(NS,'line');
+      line.setAttribute('x1', ex0); line.setAttribute('y1', ey0);
+      line.setAttribute('x2', ex1); line.setAttribute('y2', ey1);
+      line.setAttribute('stroke', isCollisionGid.has(gid) ? 'var(--danger)' : seqColor(t));
+      line.setAttribute('stroke-width', lw);
+      line.setAttribute('opacity', 0.85);
+      gLines.appendChild(line);
+    }
+
+    const b = document.createElementNS(NS,'circle');
+    b.setAttribute('cx', ex0); b.setAttribute('cy', ey0);
+    b.setAttribute('r', r0*0.75);
+    b.setAttribute('fill', 'var(--before)');
+    b.setAttribute('data-gid', gid); b.setAttribute('data-role','before');
+    gBefore.appendChild(b);
+
+    const a = document.createElementNS(NS,'circle');
+    a.setAttribute('cx', ex1t); a.setAttribute('cy', ey1t);
+    a.setAttribute('r', r0*0.85);
+    a.setAttribute('fill', isCollisionGid.has(gid) ? 'var(--danger)' : 'var(--after)');
+    a.setAttribute('data-gid', gid); a.setAttribute('data-role','after');
+    gAfter.appendChild(a);
+  }
+}
+
+// hover: use nearest-point lookup via mouse position mapped to data space
+function screenToData(evt) {
+  const rect = wrap.getBoundingClientRect();
+  const sx = (evt.clientX - rect.left) / rect.width;
+  const sy = (evt.clientY - rect.top) / rect.height;
+  return { x: view.x + sx*view.w, y: view.y + sy*view.h };
+}
+
+let hoverRows = null;
+function buildHoverIndex() { hoverRows = RAW; }
+buildHoverIndex();
+
+wrap.addEventListener('mousemove', (evt) => {
+  const p = screenToData(evt);
+  let best = null, bestD2 = Infinity;
+  const rect = wrap.getBoundingClientRect();
+  const pxPerUnit = rect.width / view.w;
+  for (const row of hoverRows) {
+    const ex1 = row[0] + (row[2]-row[0])*exag;
+    const ey1 = -row[1] + (-(row[3]-row[1]))*exag;
+    const d2 = (ex1-p.x)*(ex1-p.x) + (ey1-p.y)*(ey1-p.y);
+    if (d2 < bestD2) { bestD2 = d2; best = row; }
+  }
+  const pxDist = Math.sqrt(bestD2) * pxPerUnit;
+  if (best && pxDist < 14) {
+    const [x0,y0,x1,y1,d,gid] = best;
+    tooltip.innerHTML =
+      `<span class="k">gid</span> ${gid}\n` +
+      `<span class="k">before</span> ${fmt(x0)}, ${fmt(y0)}\n` +
+      `<span class="k">after </span> ${fmt(x1)}, ${fmt(y1)}\n` +
+      `<span class="k">disp  </span> <span class="${d>CELL_HEIGHT?'hi':''}">${d.toExponential(3)}</span>`;
+    tooltip.style.opacity = 1;
+    tooltip.style.left = (evt.clientX - rect.left + 14) + 'px';
+    tooltip.style.top = (evt.clientY - rect.top + 14) + 'px';
+  } else {
+    tooltip.style.opacity = 0;
+  }
+});
+wrap.addEventListener('mouseleave', () => tooltip.style.opacity = 0);
+
+// pan + zoom
+let panning = false, panStart = null, viewStart = null;
+wrap.addEventListener('mousedown', (evt) => {
+  panning = true; wrap.classList.add('grabbing');
+  panStart = {x: evt.clientX, y: evt.clientY}; viewStart = {...view};
+});
+window.addEventListener('mousemove', (evt) => {
+  if (!panning) return;
+  const rect = wrap.getBoundingClientRect();
+  const dx = (evt.clientX - panStart.x) / rect.width * view.w;
+  const dy = (evt.clientY - panStart.y) / rect.height * view.h;
+  view.x = viewStart.x - dx; view.y = viewStart.y - dy;
+  applyView();
+});
+window.addEventListener('mouseup', () => { panning = false; wrap.classList.remove('grabbing'); });
+
+wrap.addEventListener('wheel', (evt) => {
+  evt.preventDefault();
+  const rect = wrap.getBoundingClientRect();
+  const sx = (evt.clientX - rect.left) / rect.width;
+  const sy = (evt.clientY - rect.top) / rect.height;
+  const dataX = view.x + sx*view.w, dataY = view.y + sy*view.h;
+  const factor = Math.exp(evt.deltaY * 0.0015);
+  view.w *= factor; view.h *= factor;
+  view.x = dataX - sx*view.w; view.y = dataY - sy*view.h;
+  applyView();
+  rebuild();
+}, {passive:false});
+
+document.getElementById('zoomFit').addEventListener('click', () => {
+  view = {x: dataBox.x, y: -(dataBox.y+dataBox.h), w: dataBox.w, h: dataBox.h};
+  applyView(); rebuild();
+});
+document.getElementById('zoomReset').addEventListener('click', () => {
+  view = {x: dataBox.x, y: -(dataBox.y+dataBox.h), w: dataBox.w, h: dataBox.h};
+  applyView(); rebuild();
+});
+document.getElementById('zoomLE').addEventListener('click', () => {
+  const span = 0.03;
+  view = {x: -span/2, y: -span/2, w: span, h: span};
+  applyView(); rebuild();
+});
+document.getElementById('zoomTE').addEventListener('click', () => {
+  const span = 0.03;
+  view = {x: 1-span*0.8, y: -span/2, w: span, h: span};
+  applyView(); rebuild();
+});
+document.getElementById('showCurve').addEventListener('change', (e) => {
+  showCurve = e.target.checked; rebuild();
+});
+document.getElementById('showCorners').addEventListener('change', (e) => {
+  showCorners = e.target.checked; rebuild();
+});
+
+const exagInput = document.getElementById('exag');
+const exagVal = document.getElementById('exagVal');
+exagInput.addEventListener('input', () => {
+  exag = +exagInput.value;
+  exagVal.textContent = exag + '×';
+  rebuild();
+});
+document.getElementById('onlyMoved').addEventListener('change', (e) => {
+  onlyMoved = e.target.checked;
+  rebuild();
+});
+
+// initial fit: whole airfoil
+document.getElementById('zoomFit').click();
+window.addEventListener('resize', () => { updateStrokeScale(); rebuild(); });
+</script>
