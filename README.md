@@ -1,33 +1,30 @@
 # AeroHexMesh
 
-A pipeline for generating high-order, spanwise-extruded 3D meshes (O-grid or
-C-grid) for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab), a
-spectral-element CFD solver, starting from a 2D
+A framework for generating high-order, spanwise-extruded 3D meshes (O-grid or
+C-grid) for spectral-element CFD solvers, starting from a 2D
 [Construct2D](https://sourceforge.net/projects/construct2d/) grid. Although
 built and tested around airfoils, nothing in the pipeline is airfoil-specific
 — it works from any closed 2D curve Construct2D can mesh.
 
 ```
-Construct2D            linear_mesh/                    high_order_mesh/
-2D closed    ───────►  extrude, remap NMF,   ───────►   snap wall nodes onto
-curve .p3d/.nmf         Gmsh .msh, partition             fitted curve, elastic
-                        (SOD2D .hdf, tool_               relax (MeshElasticitySolver)
-                        meshConversorPar)                → smoothed mesh
+Construct2D             Construct2D_to_<SOLVER>/
+2D closed    ───────►   extrude, convert, partition, smooth the
+curve .p3d/.nmf          wall boundary for the target solver
 ```
 
-The smoothed mesh (`saveNewCoords`/`mesh_h5_file_newname` in
-`MeshElasticitySolver.json`, e.g. `naca_o_new-2.hdf`) is written into
-`high_order_mesh/` — copy it wherever you want to run a production
-simulation; this repo doesn't include a separate production-run directory.
+Each `Construct2D_to_<SOLVER>/` directory is a self-contained pipeline from
+the shared 2D Construct2D grid to a smoothed, solver-ready 3D mesh — see its
+own README for the details of that pipeline's stages.
 
 ## Repository layout
 
 | Path | What it is |
 |---|---|
-| `Construct2D/` | Vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See [Credits](#credits). |
-| `Construct2D_to_SOD2D/linear_mesh/` | 2D → 3D extrusion, NMF remap, Plot3D → Gmsh conversion, SOD2D export, partitioning. See its own [README](Construct2D_to_SOD2D/linear_mesh/README.md). |
-| `Construct2D_to_SOD2D/high_order_mesh/` | Snaps the faceted high-order wall boundary onto a cubic spline fit through the mesh's own wall corner points via SOD2D's `MeshElasticitySolver`, elastically relaxing the interior, and writes out the smoothed mesh. See its own [README](Construct2D_to_SOD2D/high_order_mesh/README.md). |
-| `Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/` | SOD2D itself, as a git submodule (see [Credits](#credits)). |
+| `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See [Credits](#credits). |
+| `Construct2D_to_SOD2D/` | 2D grid → smoothed high-order mesh for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](Construct2D_to_SOD2D/README.md). |
+
+Additional `Construct2D_to_<SOLVER>/` pipelines (e.g. Nek5000/NekRS) may be
+added following the same pattern.
 
 ## Getting the code
 
@@ -41,39 +38,34 @@ If you already cloned without `--recurse-submodules`:
 git submodule update --init --recursive
 ```
 
-The `sod2d_gitlab` submodule is currently pinned to the
-`277-witness-points-using-wrong-connectivity` branch, which carries a fix for
-high-order wall boundary smoothing (parametric arc-length placement,
-replacing an earlier nearest-point-search approach that could collide near
-regions of high curvature).
-
 ## Prerequisites
 
-- Python 3 with `numpy` (and `h5py` for the SOD2D export step).
-- [Gmsh](https://gmsh.info/), invoked as a CLI.
-- MPI and HDF5, for mesh partitioning and running SOD2D.
-- SOD2D itself, built from the `sod2d_gitlab` submodule (see its own
-  [README](Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/README.md) for build
-  instructions) — needed both to run the `MeshElasticitySolver` / production
-  solves, and for `tool_meshConversorPar` (mesh partitioning), which is
-  CPU-only and requires `-DTOOL_MESHPART=ON` at CMake configure time (e.g.
-  `sod2d_gitlab/utils/buildCPU.sh <threads> <isMN> <setTPP> 1`) — it isn't
-  built by the GPU build.
+Each `Construct2D_to_<SOLVER>/` pipeline has its own prerequisites and build
+instructions — see its README (e.g.
+[`Construct2D_to_SOD2D/README.md`](Construct2D_to_SOD2D/README.md)).
 
 Generated mesh, results, and log files (`*.hdf`, `*.h5`, `*.msh`, `*.log`,
-etc.) are gitignored — regenerate them by running the pipeline rather than
-expecting them to be present after a clone.
+etc.) are gitignored — regenerate them by running the relevant pipeline
+rather than expecting them to be present after a clone.
 
 ## Credits
 
 This repository builds on several external projects. Full credit to their
 authors:
 
+### Shared across pipelines
+
 - **[Construct2D](https://sourceforge.net/projects/construct2d/)** —
   Copyright © 2013–2018 Daniel Prosser, GPLv3. Vendored in full under
   `Construct2D/` (source, Makefiles, license, and docs as distributed
   upstream). Used unmodified as an external tool invoked by the pipeline,
   not linked into anything here.
+- **[Gmsh](https://gmsh.info/)** (Christophe Geuzaine and Jean-François
+  Remacle) — external dependency, invoked as a CLI; not vendored or
+  redistributed here.
+
+### `Construct2D_to_SOD2D/` pipeline
+
 - **[SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab)** — Copyright ©
   2022 Lucas Gasparino, Jordi Muela and Oriol Lehmkuhl (Barcelona
   Supercomputing Center), MIT License. Included as the
@@ -94,10 +86,7 @@ authors:
   `utils/gmsh2sod2d/gmsh2sod2d.py` (same BSC credit as above). Likewise
   `sod2d_tools/tool_meshConversorPar` is a compiled copy of
   `sod2d_gitlab/tool_meshConversorPar` — see
-  [Prerequisites](#prerequisites).
-- **[Gmsh](https://gmsh.info/)** (Christophe Geuzaine and Jean-François
-  Remacle) — external dependency, invoked as a CLI; not vendored or
-  redistributed here.
+  [`Construct2D_to_SOD2D/README.md`](Construct2D_to_SOD2D/README.md#prerequisites).
 - The parametric arc-length wall-boundary placement in
   `MeshElasticitySolver.f90`'s `imposedDisplacement_elasticitySolverBufferSplineWall`
   was reverse-engineered from a working **[Nek5000](https://nek5000.mcs.anl.gov/)**

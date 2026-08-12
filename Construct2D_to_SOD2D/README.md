@@ -33,7 +33,11 @@ Construct2D produces and turns it into a smoothed, partitioned, high-order
 
 `CFD_code/sod2d_gitlab/` is [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab)
 itself, included as a git submodule (see the top-level README's
-[Credits](../README.md#credits)). Both stages above depend on binaries built
+[Credits](../README.md#credits)). It's currently pinned to the
+`277-witness-points-using-wrong-connectivity` branch, which carries a fix for
+high-order wall boundary smoothing (parametric arc-length placement,
+replacing an earlier nearest-point-search approach that could collide near
+regions of high curvature). Both stages above depend on binaries built
 from it:
 
 | Binary | Used by | Build notes |
@@ -44,6 +48,19 @@ from it:
 
 See `sod2d_gitlab`'s own [README](CFD_code/sod2d_gitlab/README.md) for full
 build instructions.
+
+## Prerequisites
+
+- Python 3 with `numpy` (and `h5py` for the SOD2D export step).
+- [Gmsh](https://gmsh.info/), invoked as a CLI.
+- MPI and HDF5, for mesh partitioning and running SOD2D.
+- SOD2D itself, built from the `sod2d_gitlab` submodule — see [`CFD_code/`](#cfd_code)
+  above and its own [README](CFD_code/sod2d_gitlab/README.md) for build
+  instructions.
+
+Generated mesh, results, and log files (`*.hdf`, `*.h5`, `*.msh`, `*.log`,
+etc.) are gitignored — regenerate them by running the pipeline rather than
+expecting them to be present after a clone.
 
 ## Running it end to end
 
