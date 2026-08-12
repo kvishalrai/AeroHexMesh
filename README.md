@@ -1,14 +1,16 @@
 # AeroHexMesh
 
-A pipeline for generating high-order, spanwise-extruded 3D airfoil meshes
-(O-grid or C-grid) for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab), a
+A pipeline for generating high-order, spanwise-extruded 3D meshes (O-grid or
+C-grid) for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab), a
 spectral-element CFD solver, starting from a 2D
-[Construct2D](https://sourceforge.net/projects/construct2d/) grid.
+[Construct2D](https://sourceforge.net/projects/construct2d/) grid. Although
+built and tested around airfoils, nothing in the pipeline is airfoil-specific
+— it works from any closed 2D curve Construct2D can mesh.
 
 ```
 Construct2D            linear_mesh/                    high_order_mesh/         prod_run/
-2D airfoil   ───────►  extrude, remap NMF,   ───────►   snap wall nodes    ────► partitioned
-.p3d/.nmf              Gmsh .msh, partition             onto exact curve         production run
+2D closed    ───────►  extrude, remap NMF,   ───────►   snap wall nodes    ────► partitioned
+curve .p3d/.nmf         Gmsh .msh, partition             onto fitted curve        production run
                         (SOD2D .hdf, tool_               (MeshElasticitySolver)
                         meshConversorPar)
 ```
@@ -17,9 +19,9 @@ Construct2D            linear_mesh/                    high_order_mesh/         
 
 | Path | What it is |
 |---|---|
-| `Construct2D/` | Vendored 2D airfoil grid generator (source + Windows binary). See [Credits](#credits). |
+| `Construct2D/` | Vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See [Credits](#credits). |
 | `Construct2D_to_SOD2D/linear_mesh/` | 2D → 3D extrusion, NMF remap, Plot3D → Gmsh conversion, SOD2D export, partitioning. See its own [README](Construct2D_to_SOD2D/linear_mesh/README.md). |
-| `Construct2D_to_SOD2D/high_order_mesh/` | Snaps the faceted high-order wall boundary onto the true airfoil curve via SOD2D's `MeshElasticitySolver`, elastically relaxing the interior. See its own [README](Construct2D_to_SOD2D/high_order_mesh/README.md). |
+| `Construct2D_to_SOD2D/high_order_mesh/` | Snaps the faceted high-order wall boundary onto a cubic spline fit through the mesh's own wall corner points via SOD2D's `MeshElasticitySolver`, elastically relaxing the interior. See its own [README](Construct2D_to_SOD2D/high_order_mesh/README.md). |
 | `Construct2D_to_SOD2D/prod_run/` | Production SOD2D run configs for the smoothed meshes. |
 | `Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/` | SOD2D itself, as a git submodule (see [Credits](#credits)). |
 
