@@ -60,19 +60,19 @@ sample O-grid and C-grid pairs). `--config` is required and has no
 default — pick whichever `flow_config_*.json` matches the mesh topology
 you're running (`mesh_type` must agree with the actual `.nmf` content).
 
-### flow_config*.json fields used by this pipeline
+### flow_config*.json fields
+
+Every field is read by this pipeline — there's nothing extra in these files
+for a downstream solver run to consume. The 2D mesh dimensions (`IDIM`/`JDIM`)
+are read directly from the `.nmf` file's own header, not from config.
 
 | Field | Meaning |
 |---|---|
 | `mesh_type` | `"OGRD"` (periodically closed in i) or `"CGRD"` (wake-cut, not closed) — must match the actual 2D `.nmf` topology |
-| `idim`, `jmax` | 2D mesh dimensions, must match the `.nmf`'s declared `IDIM`/`JDIM` |
 | `angle_of_attack` | degrees; drives the inlet/outlet split on the farfield arc (see below) |
 | `z_spanwise_len`, `z_spanwise_planes` | spanwise extrusion length and number of planes (>= 2) |
 | `porder` | Gmsh element order for the final mesh |
 | `num_partitions` | number of MPI ranks to partition the mesh for |
-
-(The config files also carry additional fields consumed by the downstream
-SOD2D solver run itself, not by this pipeline.)
 
 ## Physical-id convention
 

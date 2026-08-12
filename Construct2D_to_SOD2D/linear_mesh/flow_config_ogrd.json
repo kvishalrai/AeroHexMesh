@@ -1,25 +1,8 @@
 {
-   "Re_number":1000000.0,
-   "angle_of_attack":5.0,
-   "mach":0.15,
-   "rho":1.0,
-   "Uinf":1.0,
-   "airfoil_dat_file":"airfoil",
-   "airfoil_chord":1.0,
-   "RANS_ypls":1,
-   "LES_ypls":1,
-   "idim":128,
-   "jmax":65,
-   "radi":15,
    "mesh_type":"OGRD",
+   "angle_of_attack":5.0,
    "z_spanwise_len":0.2,
    "z_spanwise_planes":4,
    "porder":4,
-   "num_partitions":2,
-   "airfoil_per.geo":"airfoil_per.geo",
-   "final_istep": 10000001,
-   "cfl_conv": 0.55,
-   "flag_type_wmles":"wmles_type_reichardt",
-   "wmles_extype":"ex_type_face",
-   "wmles_walex":0.00028
+   "num_partitions":2
 }

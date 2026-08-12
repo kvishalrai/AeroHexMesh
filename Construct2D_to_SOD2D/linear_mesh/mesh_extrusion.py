@@ -163,9 +163,12 @@ def _remap_2d_face_to_3d(face_2d, s1, e1, s2, e2, z_planes):
     raise ValueError(f"Unexpected 2D face id {face_2d}")
 
 
-def write_ext_nmf(airfoil_file, work_dir, idim, jmax, z_planes, mesh_type):
+def write_ext_nmf(airfoil_file, work_dir, z_planes, mesh_type):
     """Derive the extruded 3D Neutral Map File from the user-supplied 2D
-    NMF, remapping face numbers/ranges for the spanwise extrusion.
+    NMF, remapping face numbers/ranges for the spanwise extrusion. IDIM/JDIM
+    are read directly from the 2D NMF's own header, not passed in. Returns
+    (idim, jmax, boundaries_2d) so callers needing the 2D NMF's own contents
+    don't have to re-parse it.
 
     mesh_type selects how the 2D file's j=jmin (wall) face is expected to
     be structured:
@@ -199,8 +202,6 @@ def write_ext_nmf(airfoil_file, work_dir, idim, jmax, z_planes, mesh_type):
     src_nmf = work_dir / f"{base}.nmf"
     nmf_file = work_dir / f"{base}_ext.nmf"
 
-    idim = int(idim)
-    jmax = int(jmax)
     z_planes = int(z_planes)
 
     if not src_nmf.exists():
@@ -208,12 +209,7 @@ def write_ext_nmf(airfoil_file, work_dir, idim, jmax, z_planes, mesh_type):
             f"Expected the user-supplied 2D Neutral Map File at {src_nmf}"
         )
 
-    src_idim, src_jmax, boundaries_2d = _read_2d_nmf(src_nmf)
-    if (src_idim, src_jmax) != (idim, jmax):
-        raise ValueError(
-            f"{src_nmf} declares IDIM/JDIM ({src_idim},{src_jmax}) that "
-            f"don't match flow_config's idim/jmax ({idim},{jmax})"
-        )
+    idim, jmax, boundaries_2d = _read_2d_nmf(src_nmf)
 
     lines = []
 
@@ -262,6 +258,7 @@ def write_ext_nmf(airfoil_file, work_dir, idim, jmax, z_planes, mesh_type):
         f.writelines(lines)
 
     print(f"Wrote {nmf_file}")
+    return idim, jmax, boundaries_2d
 
 
 # Fixed physical-id convention for the final SOD2D mesh, used for every

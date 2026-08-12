@@ -2,7 +2,8 @@
 
 Given a user-supplied 2D Plot3D + Neutral Map File pair (produced
 externally with Construct2D) and a flow_config*.json describing the mesh
-(mesh_type, dimensions, spanwise extrusion, ...), this script:
+(mesh_type, spanwise extrusion, ...; the 2D mesh dimensions are read
+straight from the NMF, not from config), this script:
 
 1. extrudes the 2D mesh spanwise into 3D and remaps the NMF (mesh_extrusion.py)
 2. converts the extruded Plot3D mesh to Gmsh format (p3d_to_gmsh.py)
@@ -22,7 +23,6 @@ from mesh_extrusion import (
     write_geo_file,
     write_partition_input_json,
     read_plot3d_2d,
-    _read_2d_nmf,
     PERIODIC_ID,
 )
 from p3d_to_gmsh import p3d2gmsh
@@ -132,12 +132,12 @@ def sod2d_airfoil(
         )
 
         # Generate the connectivity map, remapped from the user-supplied
-        # 2D NMF onto the extruded 3D block.
-        write_ext_nmf(
+        # 2D NMF onto the extruded 3D block. idim/jmax/boundaries_2d are
+        # read from the 2D NMF's own header/body here, not from config --
+        # reused below rather than re-parsing the file.
+        idim, jmax, boundaries_2d = write_ext_nmf(
             airfoil_file,
             work_dir,
-            sod2d_config["idim"],
-            sod2d_config["jmax"],
             sod2d_config["z_spanwise_planes"],
             mesh_type,
         )
@@ -150,7 +150,6 @@ def sod2d_airfoil(
         # point search) onto the wall's own shape without moving any corner
         # node.
         x2d, y2d = read_plot3d_2d(work_dir / f"{airfoil_name}.p3d")
-        _, _, boundaries_2d = _read_2d_nmf(work_dir / f"{airfoil_name}.nmf")
         wall_spline_file = work_dir / f"{airfoil_name}_wall_spline.dat"
         build_wall_spline_table(
             x2d, y2d, boundaries_2d, mesh_type, wall_spline_file
@@ -163,7 +162,7 @@ def sod2d_airfoil(
         # can't be known ahead of time.
         _, groups = p3d2gmsh(
             p3d_file=f"{airfoil_name}_ext.p3d",
-            idim=sod2d_config["idim"],
+            idim=idim,
             angle_of_attack=sod2d_config["angle_of_attack"],
             mesh_type=mesh_type,
             map_file=f"{airfoil_name}_ext.nmf",
