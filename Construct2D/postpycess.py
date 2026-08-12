@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #  This is PostPycess, the CFD postprocessor
 
@@ -17,6 +17,7 @@
 
 #  Copyright 2013 - 2018 Daniel Prosser
 
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colorobj
@@ -30,6 +31,10 @@ import math
 #
 ################################################################################
 def main():
+
+  if sys.version_info[0] < 3:
+    print('Error: PostPycess requires Python 3. Run it with python3 instead.')
+    return
 
   loadnew = True
 
@@ -176,8 +181,8 @@ def main():
 #         Create the plot
           if (validvar):
             if varname != None:
-              print('Max ' + varname + ': '), maxvar
-              print('Min ' + varname + ': '), minvar
+              print('Max ' + varname + ': ' + str(maxvar))
+              print('Min ' + varname + ': ' + str(minvar))
               print('')
             if plottype == 'grid':
               plot_grid(x, y, colormap, plaincolor, 
@@ -421,8 +426,8 @@ def change_options(current_options):
     print('Select option to change:\n')
 
     for i in range(0, nopts):
-      print(' ' + str(i+1) + ') ') + optlist[i] \
-            + ' (current = ' + str(current_options[i]) + ')'
+      print(' ' + str(i+1) + ') ' + optlist[i] \
+            + ' (current = ' + str(current_options[i]) + ')')
 
     print(' Q) Go back to the main menu')
 
@@ -472,7 +477,7 @@ def change_list_option(input_list, optname, currentval):
     print('\nAvailable choices for ' + optname + ':\n')
 
     for i in range(0, nvals):
-      print(' ' + str(i+1) + ') ') + input_list[i]
+      print(' ' + str(i+1) + ') ' + input_list[i])
 
     print(' Q) Go back to options menu')
 
@@ -503,7 +508,7 @@ def change_int_option(optname, currentval):
   while not seldone:
 
 #   Print out prompt
-    print('\nEnter new value for ') + optname 
+    print('\nEnter new value for ' + optname)
     print('  or Q to return to options menu:')
 
     selected = input('\nInput: ')
@@ -548,7 +553,7 @@ def faux_colorbar(minvar, maxvar, varname, colormap):
   colors = LineCollection(segments, cmap=plt.get_cmap(colormap),
            norm=plt.Normalize(minvar, maxvar))
   colors.set_array(colory)
-  cbar=plt.colorbar(colors)
+  cbar=plt.colorbar(colors, ax=plt.gca())
   cbar.set_label(varname, rotation=270)
 
 ################################################################################
@@ -683,23 +688,21 @@ def interpolate_contours(x, y, xi, eta, CS, minval, maxval, colormap):
   cNorm = colorobj.Normalize(vmin=minval, vmax=maxval)
   scalarMap = cmobj.ScalarMappable(norm=cNorm, cmap=plt.get_cmap(colormap))
 
-# Number of collections - this is the number of distinct contour levels
-  ncollect = len(CS.collections)
+# Number of levels
+  ncollect = len(CS.allsegs)
 
-# Iterate over each collection
+# Iterate over each level
   for i in range(0, ncollect):
-    npaths = len(CS.collections[i].get_paths())
+    npaths = len(CS.allsegs[i])
 
-#   Iterate over each line in each collection
+#   Iterate over each line at this level
     for j in range(0, npaths):
 
-#     Path and contour level
-      path = CS.collections[i].get_paths()[j]
+#     Vertices and contour level
       level = CS.levels[i]
 
 #     Store points in xi, eta vectors for each line
-      # Should use iter_segments()
-      vertices = path.vertices
+      vertices = CS.allsegs[i][j]
       xiln = vertices[:,0]
       etaln = vertices[:,1]
       nvert = xiln.shape[0]
