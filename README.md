@@ -16,6 +16,21 @@ Each `Construct2D_to_<SOLVER>/` directory is a self-contained pipeline from
 the shared 2D Construct2D grid to a smoothed, solver-ready 3D mesh — see its
 own README for the details of that pipeline's stages.
 
+## References & Acknowledgements
+
+- This work started as a collaboration between Argonne National Laboratory
+  (ANL) and the Barcelona Supercomputing Center (BSC).
+- V. Kumar acknowledges his AI4S fellowship within the Generación D
+  initiative by Red.es, Ministerio para la Transformación Digital y de la
+  Función Pública, for talent attraction (C005/24-ED CV1), funded by
+  NextGenerationEU through PRTR.
+- Part of this work was published as: V. Kumar, A. Tomboulides, P. Fischer,
+  and M. Min, "Delayed detached-eddy simulations of NACA wing sections using
+  spectral elements," *Journal of Turbulence*, vol. 26, 2025.
+  https://doi.org/10.1080/14685248.2025.2608679
+- Contributions from several BSC and ANL personnel are acknowledged:
+  YuHsiang Lan (ANL), Bedri Yagez (BSC), Jose Maria (BSC).
+
 ## Repository layout
 
 | Path | What it is |
