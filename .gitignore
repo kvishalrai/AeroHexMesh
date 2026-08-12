@@ -19,6 +19,13 @@ fort.*
 # Stale dumps from the (now removed) dump_wall_coords diagnostic
 wall_coords_*.dat
 
+# high_order_mesh/ is smoothing-step tooling (config/scripts/spline tables),
+# not a place to accumulate sod2d run output -- unlike prod_run/, where
+# surf_code_*/timer_* are kept as reference results.
+/Construct2D_to_SOD2D/high_order_mesh/surf_code_*.dat
+/Construct2D_to_SOD2D/high_order_mesh/paramQual.txt
+/Construct2D_to_SOD2D/high_order_mesh/roughness.dat
+
 # Scratch verification runs, not part of the deliverable pipeline
 /Construct2D_to_SOD2D/high_order_mesh_test_cgrd/
 /Construct2D_to_SOD2D/high_order_mesh_test_new/
