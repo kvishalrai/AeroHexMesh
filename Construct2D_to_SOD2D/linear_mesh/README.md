@@ -34,9 +34,16 @@ This is the **middle step** of a 3-step pipeline:
 - Python 3 with `numpy` (and `h5py` for the `gmsh2sod2d.py` step).
 - [Gmsh](https://gmsh.info/), invoked as a CLI (`gmsh airfoil_per.geo -0`).
 - MPI (`mpirun`) and HDF5, for the partitioning step.
-- `sod2d_tools/tool_meshConversorPar` — a compiled SOD2D binary,
-  **not included in this repo** (platform-specific). Build it from the
-  SOD2D repo, or copy an existing build, into `sod2d_tools/`.
+- `sod2d_tools/gmsh2sod2d.py` and `sod2d_tools/tool_meshConversorPar` both
+  come from the SOD2D repo itself (`../CFD_code/sod2d_gitlab/utils/gmsh2sod2d/`
+  and `.../tool_meshConversorPar/`), **not included in this repo** as
+  build/binary artifacts:
+  - `gmsh2sod2d.py` is a plain script — copy it (or symlink it) in from the
+    submodule.
+  - `tool_meshConversorPar` must be **compiled** — it's a CPU-only tool
+    (`-DTOOL_MESHPART=ON` when configuring CMake, e.g.
+    `utils/buildCPU.sh <threads> <isMN> <setTPP> 1`; not built by the GPU
+    build). Copy the resulting binary into `sod2d_tools/`.
 
 ## Usage
 

@@ -50,8 +50,11 @@ regions of high curvature).
 - MPI and HDF5, for mesh partitioning and running SOD2D.
 - SOD2D itself, built from the `sod2d_gitlab` submodule (see its own
   [README](Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/README.md) for build
-  instructions) — needed both for `tool_meshConversorPar` (partitioning) and
-  to run the `MeshElasticitySolver` / production solves.
+  instructions) — needed both to run the `MeshElasticitySolver` / production
+  solves, and for `tool_meshConversorPar` (mesh partitioning), which is
+  CPU-only and requires `-DTOOL_MESHPART=ON` at CMake configure time (e.g.
+  `sod2d_gitlab/utils/buildCPU.sh <threads> <isMN> <setTPP> 1`) — it isn't
+  built by the GPU build.
 
 Generated mesh, results, and log files (`*.hdf`, `*.h5`, `*.msh`, `*.log`,
 etc.) are gitignored — regenerate them by running the pipeline rather than
@@ -83,7 +86,11 @@ authors:
   The O/C-grid handling, wall/inlet/outlet classification, and periodic
   node-id aliasing on top of that base are original to this repo.
 - **`Construct2D_to_SOD2D/linear_mesh/sod2d_tools/gmsh2sod2d.py`** —
-  vendored from the SOD2D project's own tooling (same BSC credit as above).
+  vendored (with minor local tweaks) from `sod2d_gitlab`'s own
+  `utils/gmsh2sod2d/gmsh2sod2d.py` (same BSC credit as above). Likewise
+  `sod2d_tools/tool_meshConversorPar` is a compiled copy of
+  `sod2d_gitlab/tool_meshConversorPar` — see
+  [Prerequisites](#prerequisites).
 - **[Gmsh](https://gmsh.info/)** (Christophe Geuzaine and Jean-François
   Remacle) — external dependency, invoked as a CLI; not vendored or
   redistributed here.
