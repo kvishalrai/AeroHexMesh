@@ -30,6 +30,10 @@ wall_coords_*.dat
 /Construct2D_to_SOD2D/high_order_mesh_test_cgrd/
 /Construct2D_to_SOD2D/high_order_mesh_test_new/
 
+# Production runs: copy the smoothed mesh out of high_order_mesh/ and run
+# wherever -- no dedicated production-run directory is tracked here.
+/Construct2D_to_SOD2D/prod_run/
+
 # Vendored/compiled binaries (rebuild from source)
 /Construct2D/construct2d
 /Construct2D/bin/x86_64/Linux/construct2d
