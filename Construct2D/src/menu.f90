@@ -322,7 +322,7 @@ subroutine run_command(command, surf, options, done, ioerror)
   character(4), intent(in) :: command
   type(airfoil_surface_type), intent(inout) :: surf
   type(options_type), intent(inout) :: options
-  logical, intent(out) :: done
+  logical, intent(inout) :: done
   integer, intent(inout) :: ioerror
 
   character(300) airfoil_file
@@ -507,7 +507,7 @@ subroutine surface_options(opt, soptdone)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: soptdone
 
   soptdone = .false.
@@ -532,7 +532,7 @@ subroutine elliptic_surface_options(opt, soptdone)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: soptdone
 
   character(4) input
@@ -665,7 +665,7 @@ subroutine hyperbolic_surface_options(opt, soptdone)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: soptdone
 
   character(4) input
@@ -766,7 +766,7 @@ subroutine grid_options(opt, voptdone, tegap)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: voptdone
   logical, intent(in) :: tegap
 
@@ -792,7 +792,7 @@ subroutine elliptic_grid_options(opt, voptdone, tegap)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: voptdone
   logical, intent(in) :: tegap
 
@@ -971,7 +971,7 @@ subroutine hyperbolic_grid_options(opt, voptdone, tegap)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: voptdone
   logical, intent(in) :: tegap
 
@@ -1197,7 +1197,7 @@ subroutine output_options(opt, ooptdone)
 
   Use vardef, only : options_type
 
-  type(options_type), intent(out) :: opt
+  type(options_type), intent(inout) :: opt
   logical, intent(out) :: ooptdone
 
   integer gdim, npln
