@@ -45,6 +45,27 @@ This is the **middle step** of a 3-step pipeline:
     `utils/buildCPU.sh <threads> <isMN> <setTPP> 1`; not built by the GPU
     build). Copy the resulting binary into `sod2d_tools/`.
 
+### Cluster-specific module/environment setup
+
+`run_pipeline.py` shells out to Gmsh, `python3`, and MPI for its Gmsh,
+`gmsh2sod2d.py`, and partitioning steps, and needs each to be on `PATH`
+when it runs. The defaults (`AEROHEXMESH_MODULE_SETUP` /
+`AEROHEXMESH_PYTHON_MODULE_SETUP`, both env vars) are BSC MareNostrum 5
+specific (`module getdefault sod2d` is an MN5-only alias) — **override
+them on any other system** rather than editing `run_pipeline.py`:
+
+```bash
+export AEROHEXMESH_MODULE_SETUP="module load gmsh openmpi hdf5 python3"
+export AEROHEXMESH_PYTHON_MODULE_SETUP=""   # only needed if your base
+                                             # module set's python3 lacks
+                                             # numpy/h5py
+python3 run_pipeline.py --work-dir ... --config ... --airfoil-file ...
+```
+
+Leave both unset to keep the MN5 defaults, or set either to `""` for a
+no-op (e.g. if you've already activated everything yourself, such as via
+a virtualenv, before running the pipeline).
+
 ## Usage
 
 ```

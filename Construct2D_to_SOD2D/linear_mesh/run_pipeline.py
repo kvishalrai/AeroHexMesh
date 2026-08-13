@@ -28,6 +28,20 @@ from mesh_extrusion import (
 from p3d_to_gmsh import p3d2gmsh
 from wall_spline import build_wall_spline_table
 
+# Environment setup for the external tools this pipeline shells out to
+# (Gmsh, python3, MPI/HDF5 for partitioning). Defaults to BSC MareNostrum 5's
+# module system (`module getdefault sod2d` is an MN5-specific alias, not a
+# real environment/cluster elsewhere) -- override via these env vars on any
+# other system rather than editing the run_bash() calls below.
+MODULE_SETUP = os.environ.get("AEROHEXMESH_MODULE_SETUP", "module getdefault sod2d")
+# Extra setup needed only for steps that run a python3 script requiring
+# numpy/h5py (gmsh2sod2d.py, the partitioner's input.json driver): on MN5,
+# the base module set's own python3 lacks those, so swap in anaconda.
+PYTHON_MODULE_SETUP = os.environ.get(
+    "AEROHEXMESH_PYTHON_MODULE_SETUP", "module unload python\nmodule load anaconda"
+)
+
+
 def valid_file(path, min_size=1024):
     """Return True when path is a regular file larger than min_size bytes."""
     path = Path(path)
@@ -180,17 +194,10 @@ def sod2d_airfoil(
 
         # Process the Gmsh geometry.
         run_bash(
-            """
+            f"""
 set -e
 
-##module purge
-##module load intel/2023.2.0
-##module load mkl/2023.2.0
-##module load impi/2021.10.0
-##module load hdf5/1.14.1-2-gcc
-##module load python/3.12.1
-##module load gmsh
-module getdefault sod2d
+{MODULE_SETUP}
 
 gmsh airfoil_per.geo -0
 """,
@@ -202,15 +209,8 @@ gmsh airfoil_per.geo -0
             f"""
 set -e
 
-##module purge
-##module load intel/2023.2.0
-##module load mkl/2023.2.0
-##module load impi/2021.10.0
-##module load hdf5/1.14.1-2-gcc
-##module load python/3.12.1
-module getdefault sod2d
-module unload python
-module load anaconda
+{MODULE_SETUP}
+{PYTHON_MODULE_SETUP}
 
 python3 "{gmsh2sod2d}" \
     "{airfoil_name}_per" \
@@ -238,15 +238,8 @@ python3 "{gmsh2sod2d}" \
             f"""
 set -e
 
-##module purge
-##module load openmpi/4.1.5-gcc
-##module load ucx/1.16.0-gcc
-##module load hdf5/1.14.1-2-gcc-openmpi
-##module load cmake
-
-module getdefault sod2d
-module unload python
-module load anaconda
+{MODULE_SETUP}
+{PYTHON_MODULE_SETUP}
 
 export OMPI_MCA_io=romio321
 export OMP_NUM_THREADS=1
