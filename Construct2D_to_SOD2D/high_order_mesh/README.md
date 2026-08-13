@@ -27,8 +27,8 @@ produced upstream and copied in:
 
 | File | Produced by |
 |---|---|
-| `naca_o-2.hdf` / `naca_c-2.hdf` (mesh; gitignored, not tracked) | `linear_mesh/run_pipeline.py`'s partitioning step (`tool_meshConversorPar`) — copy from `linear_mesh/runs/<work-dir>/` |
-| `naca_o_wall_spline.dat` / `naca_c_wall_spline.dat` | `linear_mesh/run_pipeline.py`, via `wall_spline.py`'s `build_wall_spline_table` — written automatically as `{airfoil}_wall_spline.dat` alongside the mesh, then copied here |
+| `naca_re50k-4.hdf` (mesh; gitignored, not tracked) | `linear_mesh/run_pipeline.py`'s partitioning step (`tool_meshConversorPar`) — copy from `linear_mesh/runs/<work-dir>/` |
+| `naca_re50k_wall_spline.dat` | `linear_mesh/run_pipeline.py`, via `wall_spline.py`'s `build_wall_spline_table` — written automatically as `{airfoil}_wall_spline.dat` alongside the mesh, then copied here |
 | `MeshElasticitySolver.json` | hand-written config for this step (see below) |
 | `airfoil0.sh` | hand-written SLURM job script — runs `sod2d MeshElasticitySolver` from the `build_gpu` build |
 | `mn5_bind.sh` | hand-written MN5 process/GPU binding wrapper, invoked by `airfoil0.sh` |
@@ -49,7 +49,7 @@ specific to this step:
    {"id":1, "bc_type":"bc_type_non_slip_adiabatic_moving"},
    ...
 ],
-"wall_spline_table_file": "naca_o_wall_spline.dat"
+"wall_spline_table_file": "naca_re50k_wall_spline.dat"
 ```
 
 - `wall_spline_table_file` — required. Path to the compact corner +
@@ -76,7 +76,12 @@ specific to this step:
 ## Running it
 
 `sbatch airfoil0.sh` from this folder (MN5, GPU partition — see the script
-for module/queue setup).
+for module/queue setup). At `num_partitions>=3` on a large mesh, two
+unrelated MPI crashes have been seen and are worked around directly in
+`airfoil0.sh` — see its comments and the `project_ucx_partitioning_fix.md`
+memory for the full diagnosis: a UCX rendezvous-protocol segfault in
+halo-exchange (`UCX_TLS=...`), and a separate segfault in Open MPI's
+`ompio` component reading a large mesh HDF5 file (`--mca io ^ompio`).
 
 ## Verifying the result
 

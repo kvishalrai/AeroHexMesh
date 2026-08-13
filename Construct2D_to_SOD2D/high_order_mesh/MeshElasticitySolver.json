@@ -2,13 +2,13 @@
    "type":"MeshElasticitySolver",
 
    "mesh_h5_file_path":"",
-   "mesh_h5_file_name":"naca_o",
+   "mesh_h5_file_name":"naca_re50k",
 
    "results_h5_file_path":"",
    "results_h5_file_name":"results",
 
    "mesh_h5_file_newpath":"",
-   "mesh_h5_file_newname":"naca_o_new",
+   "mesh_h5_file_newname":"naca_re50k_new",
 
    "saveNewCoords":true,
 
@@ -29,5 +29,5 @@
       {"id":3, "bc_type":"bc_type_outlet_incomp"}
    ],
 
-   "wall_spline_table_file": "naca_o_wall_spline.dat"
+   "wall_spline_table_file": "naca_re50k_wall_spline.dat"
 }
