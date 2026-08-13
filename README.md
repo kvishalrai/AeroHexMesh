@@ -131,10 +131,10 @@ authors:
   sub-range of the ring rather than the whole closed loop).
 - **[p3d2nek](https://github.com/yslan/p3d2nek)** (YuHsiang Lan, Argonne
   National Laboratory) — a MATLAB-based Plot3D-to-Nek5000 mesh converter,
-  an alternative to this pipeline's own `p3d_to_gmsh_nek.py` + `gmsh2nek`
-  route. Explored as a possible route but not used in the pipeline
-  documented here (needs MATLAB); referenced for anyone wanting a
-  Gmsh-free path instead.
+  and this pipeline's original intended route to a Nek5000 mesh. Replaced
+  here by the Python/Gmsh-based `p3d_to_gmsh_nek.py` + `gmsh2nek` route
+  (no MATLAB dependency), but referenced for anyone wanting that path
+  instead.
 
 ## Development
 
