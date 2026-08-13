@@ -1,0 +1,113 @@
+
+#define REDUCE(bs)                                                                                           \
+if (t < bs) {                                                                                                \
+s_intercept[t] = (s_intercept[t] > s_intercept[t + bs]) ? s_intercept[t] : s_intercept[t + bs];              \
+}
+
+@kernel void intercept(const dlong Nelements,
+                  const dlong bID,
+                  const dfloat uxmin,
+                  const dfloat uxmax,
+                  @ restrict const dfloat *sgeo,
+                  @ restrict const dlong *vmapM,
+                  @ restrict const int *EToBM,
+                  @ restrict const dfloat *x,
+                  @ restrict const dfloat *z,
+                  @ restrict const dfloat *cf,
+                  @ restrict dfloat *IC)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+    @shared dfloat s_intercept[p_blockSize];
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      s_intercept[t] = -1e9;
+      if (t < p_Nfp-1) {
+        for (int f = 0; f < p_Nfaces; f++) {
+          const dlong bIDM = EToBM[f + p_Nfaces * e];
+            if (bIDM == bID) {
+              const int n1 = t + f * p_Nfp;
+              const int n2 = t + 1 + f * p_Nfp;
+              const dlong sid1 = e * p_Nfaces * p_Nfp + n1;
+              const dlong sid2 = e * p_Nfaces * p_Nfp + n2;
+
+              const dlong id1 = vmapM[sid1];
+              const dlong id2 = vmapM[sid2];
+
+              const dfloat x1 = x[id1];
+              const dfloat x2 = x[id2];
+              const dfloat z1 = z[id1];
+              const dfloat z2 = z[id2];
+
+              const dfloat xmin = fmin(x1, x2);
+              const dfloat xmax = fmax(x1, x2);
+
+              const dfloat cf1 = cf[id1];
+              const dfloat cf2 = cf[id2];
+
+              s_intercept[t] = -1e9;
+              if(xmin > uxmin && xmax < uxmax && cf1 * cf2 < 0.0 && z1 < 1e-8 && z2 < 1e-8){
+                const dfloat slope = (cf2 - cf1) / (x2 - x1);
+                s_intercept[t] = x2 - cf2 / slope;
+              }
+            }
+        }
+      }
+    }
+    @barrier();
+
+#if p_blockSize > 512
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(512);
+    }
+    @barrier();
+#endif
+
+#if p_blockSize > 256
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(256);
+    }
+    @barrier();
+#endif
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(128);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(64);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(32);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(16);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(8);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(4);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      REDUCE(2);
+    }
+    @barrier();
+
+    for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
+      if (t < 1) {
+        IC[e] = (s_intercept[0] > s_intercept[1]) ? s_intercept[0] : s_intercept[1];
+      }
+    }
+    @barrier();
+  }
+}

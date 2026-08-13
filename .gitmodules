@@ -2,3 +2,9 @@
 	path = Construct2D_to_SOD2D/CFD_code/sod2d_gitlab
 	url = https://gitlab.com/bsc_sod2d/sod2d_gitlab.git
 	branch = 277-witness-points-using-wrong-connectivity
+[submodule "Construct2D_to_NEKRS/CFD_code/Nek5000"]
+	path = Construct2D_to_NEKRS/CFD_code/Nek5000
+	url = https://github.com/Nek5000/Nek5000.git
+[submodule "Construct2D_to_NEKRS/CFD_code/nekRS"]
+	path = Construct2D_to_NEKRS/CFD_code/nekRS
+	url = https://github.com/Nek5000/nekRS.git

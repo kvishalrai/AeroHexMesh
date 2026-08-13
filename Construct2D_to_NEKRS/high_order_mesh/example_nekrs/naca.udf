@@ -1,0 +1,422 @@
+//
+// nekRS User Defined File
+//
+//#include "udf.hpp"
+#include "RANSktau.hpp"
+//#include "postProcessing.hpp"
+#include "tavg.hpp"
+
+static std::string caseType;
+static dfloat rho, mueLam;
+static occa::memory o_ywd;
+
+static int Nfields = 14;
+static dfloat tAvgStartTime;
+static int tAvgWriteInterval;
+
+#ifdef __okl__
+
+#include "naca.oudf"
+#include "my_drag.oudf"
+
+#endif
+
+static int NUMBER_ELEMENTS_X;
+static int NUMBER_ELEMENTS_Y;
+static int NUMBER_ELEMENTS_Z;
+
+static dfloat P_VISC, P_U0, P_AOA, P_COS_AOA, P_SIN_AOA;
+occa::memory o_visco;
+
+dfloat *dragvx, *dragvy, *dragvz;
+occa::memory o_dragvx, o_dragvy, o_dragvz;
+
+dfloat *dragpx, *dragpy, *dragpz;
+occa::memory o_dragpx, o_dragpy, o_dragpz;
+
+struct Force {
+  dfloat x;
+  dfloat y;
+  dfloat z;
+};
+
+void planarAverage(nrs_t *nrs)
+{
+  auto mesh = nrs->mesh;
+  poolDeviceMemory<dfloat> o_work(Nfields * nrs->fieldOffset);
+
+  planarAvg(mesh, "z", NUMBER_ELEMENTS_X, NUMBER_ELEMENTS_Y, NUMBER_ELEMENTS_Z, Nfields, nrs->fieldOffset, o_work); // o_wor    k tavg-ed 9-slots data
+}
+
+void userq(double time)
+{
+  if(caseType == "DES" || caseType == "RANS") RANSktau::updateSourceTerms();
+}
+
+void uservp(double time)
+{
+  auto mesh = nrs->mesh;
+  auto cds = nrs->cds;
+
+  if(caseType == "DES" || caseType == "RANS") {
+    RANSktau::updateProperties();
+
+    dfloat conductivity;
+    platform->options.getArgs("SCALAR00 DIFFUSIVITY", conductivity);
+    const dfloat Pr_t = 0.85;
+    occa::memory o_mue_t = RANSktau::o_mue_t();
+    occa::memory o_temp_mue = cds->o_diff + 0 * cds->fieldOffset[0];
+    scalarScaledAdd(mesh->Nlocal, conductivity, 1 / Pr_t, o_mue_t, o_temp_mue);
+  }
+}
+
+/* Viscous Drag and Pressure Drag */
+Force compute_dragv(nrs_t *nrs, int nbID, const occa::memory& o_bID, occa::memory &o_Sij, const dfloat scale)
+{
+  mesh_t *mesh = nrs->mesh;
+  Force dragv;
+
+  if(o_dragvx.size() == 0) {
+    dragvx = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    dragvy = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    dragvz = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    o_dragvx = platform->device.malloc<dfloat>(mesh->Nelements);
+    o_dragvy = platform->device.malloc<dfloat>(mesh->Nelements);
+    o_dragvz = platform->device.malloc<dfloat>(mesh->Nelements);
+  }
+
+  dragvKernel(mesh->Nelements,
+       nrs->fieldOffset,
+       nbID,
+       o_bID,
+       mesh->o_sgeo,
+       mesh->o_vmapM,
+       mesh->o_EToB,
+       nrs->o_mue,
+       o_Sij,
+       o_dragvx,
+       o_dragvy,
+       o_dragvz);
+
+  o_dragvx.copyTo(dragvx);
+  o_dragvy.copyTo(dragvy);
+  o_dragvz.copyTo(dragvz);
+
+  dragv.x=0.0;
+  dragv.y=0.0;
+  dragv.z=0.0;
+  for (dlong i = 0; i < mesh->Nelements; i++) {
+    dragv.x += dragvx[i];
+    dragv.y += dragvy[i];
+    dragv.z += dragvz[i];
+  }
+  MPI_Allreduce(MPI_IN_PLACE, &dragv.x, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  MPI_Allreduce(MPI_IN_PLACE, &dragv.y, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  MPI_Allreduce(MPI_IN_PLACE, &dragv.z, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  dragv.x *= scale;
+  dragv.y *= scale;
+  dragv.z *= scale;
+
+  return dragv;
+}
+
+Force compute_dragp(nrs_t *nrs, int nbID, const occa::memory& o_bID, occa::memory &o_P, const dfloat scale)
+{
+  mesh_t *mesh = nrs->mesh;
+  Force dragp;
+
+  if(o_dragpx.size() == 0) {
+    dragpx = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    dragpy = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    dragpz = (dfloat *) calloc(mesh->Nelements, sizeof(dfloat));
+    o_dragpx = platform->device.malloc<dfloat>(mesh->Nelements);
+    o_dragpy = platform->device.malloc<dfloat>(mesh->Nelements);
+    o_dragpz = platform->device.malloc<dfloat>(mesh->Nelements);
+  }                   
+                      
+  dragpKernel(mesh->Nelements,
+       nrs->fieldOffset,
+       nbID, 
+       o_bID,
+       mesh->o_sgeo,
+       mesh->o_vmapM, 
+       mesh->o_EToB,
+       o_P,
+       o_dragpx,
+       o_dragpy, 
+       o_dragpz);
+  
+  o_dragpx.copyTo(dragpx);
+  o_dragpy.copyTo(dragpy);
+  o_dragpz.copyTo(dragpz);
+              
+  dragp.x=0.0;
+  dragp.y=0.0;
+  dragp.z=0.0;
+  for (dlong i = 0; i < mesh->Nelements; i++) {
+    dragp.x += dragpx[i];
+    dragp.y += dragpy[i];
+    dragp.z += dragpz[i];
+  }
+  MPI_Allreduce(MPI_IN_PLACE, &dragp.x, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  MPI_Allreduce(MPI_IN_PLACE, &dragp.y, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  MPI_Allreduce(MPI_IN_PLACE, &dragp.z, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+  dragp.x *= scale;
+  dragp.y *= scale;
+  dragp.z *= scale;
+
+  return dragp;
+} 
+
+/* UDF Functions */
+void UDF_LoadKernels(occa::properties &kernelInfo)
+{
+  kernelInfo["defines/p_PI"] = M_PI;
+  kernelInfo["defines/p_U0"] = P_U0;
+  kernelInfo["defines/p_COS_AOA"] = P_COS_AOA;
+  kernelInfo["defines/p_SIN_AOA"] = P_SIN_AOA;
+  //{
+  //  auto props = kernelInfo;
+  //  props.define("p_sigma_k") = 0.6;
+  //  RANSktau::buildKernel(props);
+  //}
+}
+
+void UDF_Setup0(MPI_Comm comm, setupAide &options)
+{
+  platform->par->extract("casedata","caseType",caseType);
+  upperCase(caseType);
+  if(caseType == "LES"){
+    options.setArgs("VELOCITY STRESSFORMULATION", std::string("FALSE"));
+
+    options.setArgs("SCALAR01 SOLVER", std::string("NONE"));
+
+    options.setArgs("SCALAR02 SOLVER", std::string("NONE"));
+  }
+
+  options.getArgs("VISCOSITY", P_VISC);
+  //platform->par->extract("casedata","tavg_start_time", tAvgStartTime);
+  //platform->par->extract("casedata","tavg_write_interval", tAvgWriteInterval);
+  platform->par->extract("casedata", "number_elements_x", NUMBER_ELEMENTS_X);
+  platform->par->extract("casedata", "number_elements_y", NUMBER_ELEMENTS_Y);
+  platform->par->extract("casedata", "number_elements_z", NUMBER_ELEMENTS_Z);
+  platform->par->extract("casedata", "p_u0", P_U0);
+  platform->par->extract("casedata", "p_aoa", P_AOA);
+
+  P_COS_AOA = cos(P_AOA * M_PI/180.0);
+  P_SIN_AOA = sin(P_AOA * M_PI/180.0);
+
+}
+
+void UDF_Setup()
+{
+  auto mesh = nrs->mesh;
+  auto cds = nrs->cds;
+
+  nrs->userProperties = &uservp;
+  nrs->userScalarSource = &userq;
+
+  if(caseType == "DES" || caseType == "RANS") {
+    const int scalarFieldStart = 1;
+    platform->options.getArgs("VISCOSITY", mueLam);
+    platform->options.getArgs("DENSITY", rho);
+
+    std::vector<int> bidWall = {1};
+    occa::memory o_bidWall = platform->device.malloc<int>(bidWall.size(), bidWall.data());
+    o_ywd = mesh->minDistance(bidWall.size(), o_bidWall, "cheap");
+
+    std::string model = "sst+des";
+    if(caseType == "RANS") model = "sst";
+    RANSktau::setup(scalarFieldStart,model,o_ywd);
+}
+  //{
+  //  std::vector< std::vector<deviceMemory<dfloat>> > tavgFields;
+
+  //  deviceMemory<dfloat> o_u(nrs->o_U.slice(0 * nrs->fieldOffset , nrs->fieldOffset));
+  //  deviceMemory<dfloat> o_v(nrs->o_U.slice(1 * nrs->fieldOffset , nrs->fieldOffset));
+  //  deviceMemory<dfloat> o_w(nrs->o_U.slice(2 * nrs->fieldOffset , nrs->fieldOffset));
+  //  deviceMemory<dfloat> o_p(nrs->o_P);
+  //  deviceMemory<dfloat> o_k(nrs->cds->o_S.slice(0 * nrs->cds->fieldOffset[1], nrs->cds->fieldOffset[1]));
+  //  deviceMemory<dfloat> o_om(nrs->cds->o_S.slice(0 * nrs->cds->fieldOffset[2], nrs->cds->fieldOffset[2]));
+
+  //  auto o_mu        = nrs->cds->o_S.slice(0 * fieldOffsetBytes, fieldOffsetBytes);
+
+  //  tavgFields.push_back({o_u});
+  //  tavgFields.push_back({o_v});
+  //  tavgFields.push_back({o_w});
+  //  tavgFields.push_back({o_p});
+
+  //  tavgFields.push_back({o_u, o_u});
+  //  tavgFields.push_back({o_v, o_v});
+  //  tavgFields.push_back({o_w, o_w});
+  //  tavgFields.push_back({o_u, o_v});
+  //  tavgFields.push_back({o_u, o_w});
+  //  tavgFields.push_back({o_v, o_w});
+  //  tavgFields.push_back({o_p, o_p});
+
+  //  tavgFields.push_back({o_k});
+  //  tavgFields.push_back({o_om});
+  //  tavgFields.push_back({o_mu});
+
+  //  tavg::setup(nrs->fieldOffset, tavgFields);
+
+  //}
+}
+
+void UDF_ExecuteStep(double time, int tstep)
+{
+  mesh_t *mesh = nrs->mesh;
+  cds_t *cds = nrs->cds;
+  const dlong fieldOffsetByte = nrs->fieldOffset*sizeof(dfloat);
+
+  occa::memory o_Vx = nrs->o_U + 0*nrs->fieldOffset;
+  occa::memory o_Vy = nrs->o_U + 1*nrs->fieldOffset;
+  occa::memory o_Vz = nrs->o_U + 2*nrs->fieldOffset;
+  occa::memory o_Pr = nrs->o_P;
+  occa::memory o_S0 = cds->o_S + cds->fieldOffsetScan[0];
+  occa::memory o_S1 = cds->o_S + cds->fieldOffsetScan[1];
+  occa::memory o_S2 = cds->o_S + cds->fieldOffsetScan[2];
+  occa::memory o_S3 = cds->o_S + cds->fieldOffsetScan[3];
+
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_Vx);
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_Vy);
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_Vz);
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_Pr);
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_S1);
+  planarAvg(nrs->mesh,"z",NUMBER_ELEMENTS_X,NUMBER_ELEMENTS_Y,NUMBER_ELEMENTS_Z,1,nrs->fieldOffset,o_S2);
+
+  //if (nrs->isCheckpointStep) {
+  ////if (tstep==0) {
+  //  int Nscalar = nrs->Nscalar;
+  //  std::vector<occa::memory> o_Ulist;
+  //  std::vector<occa::memory> o_Slist;
+  //  bool coords = true;
+  //  bool FP64 = true;
+  //  bool uniform = false;
+  //  o_Ulist.push_back(o_Vx);
+  //  o_Ulist.push_back(o_Vy);
+  //  o_Ulist.push_back(o_Vz);
+  //  o_Slist.push_back(o_S0);
+  //  o_Slist.push_back(o_S1);
+  //  o_Slist.push_back(o_S2);
+  //  //fld::write("avg", time, 1, o_Ulist, o_Pr, o_Slist, coords, FP64, Nscalar, uniform);
+  //}
+
+  // chk volume flow rate
+  const dfloat ubar = platform->linAlg->innerProd(mesh->Nlocal, o_Vx, mesh->o_LMM, platform->comm.mpiComm)/mesh->volume;
+  const dfloat ebar = platform->linAlg->weightedNorm2Many(mesh->Nlocal, 3, nrs->fieldOffset, mesh->o_LMM,  nrs->o_U,  platform->comm.mpiComm) / sqrt(mesh->volume); // sqrt( int ux^2+uy^2+uz^2 / volume )
+
+  if (platform->comm.mpiRank == 0) 
+    printf("chk(rs) bar: %d %g %g %g \n",tstep,time,ubar,ebar);
+
+  // chk min/max
+  const dfloat vxmin = platform->linAlg->min(mesh->Nlocal, o_Vx, platform->comm.mpiComm);
+  const dfloat vxmax = platform->linAlg->max(mesh->Nlocal, o_Vx, platform->comm.mpiComm);
+  const dfloat vymin = platform->linAlg->min(mesh->Nlocal, o_Vy, platform->comm.mpiComm);
+  const dfloat vymax = platform->linAlg->max(mesh->Nlocal, o_Vy, platform->comm.mpiComm);
+  const dfloat vzmin = platform->linAlg->min(mesh->Nlocal, o_Vz, platform->comm.mpiComm);
+  const dfloat vzmax = platform->linAlg->max(mesh->Nlocal, o_Vz, platform->comm.mpiComm);
+  const dfloat prmin = platform->linAlg->min(mesh->Nlocal, o_Pr, platform->comm.mpiComm);
+  const dfloat prmax = platform->linAlg->max(mesh->Nlocal, o_Pr, platform->comm.mpiComm);
+  const dfloat s0min = platform->linAlg->min(mesh->Nlocal, o_S0, platform->comm.mpiComm);
+  const dfloat s0max = platform->linAlg->max(mesh->Nlocal, o_S0, platform->comm.mpiComm);
+  const dfloat s1min = platform->linAlg->min(mesh->Nlocal, o_S1, platform->comm.mpiComm);
+  const dfloat s1max = platform->linAlg->max(mesh->Nlocal, o_S1, platform->comm.mpiComm);
+  const dfloat s2min = platform->linAlg->min(mesh->Nlocal, o_S2, platform->comm.mpiComm);
+  const dfloat s2max = platform->linAlg->max(mesh->Nlocal, o_S2, platform->comm.mpiComm);
+  const dfloat s3min = platform->linAlg->min(mesh->Nlocal, o_S3, platform->comm.mpiComm);
+  const dfloat s3max = platform->linAlg->max(mesh->Nlocal, o_S3, platform->comm.mpiComm);
+  if (platform->comm.mpiRank == 0) {
+    printf(" t-min-max:  %.6e", time);
+    printf("  %.6e %.6e", vxmin, vxmax);
+    printf("  %.6e %.6e", vymin, vymax);
+    printf("  %.6e %.6e", vzmin, vzmax);
+    printf("  %.6e %.6e", prmin, prmax);
+    if(caseType == "DES" || caseType == "RANS"){
+      printf("  %.6e %.6e", s0min, s0max);
+      printf("  %.6e %.6e", s1min, s1max);
+      printf("  %.6e %.6e", s2min, s2max);
+      printf("  %.6e %.6e", s3min, s3max);
+    }
+    printf(" \n");
+  }  
+
+  // compute drag
+  std::vector<int> bidWall = {1};
+  occa::memory o_bidWall = platform->device.malloc<int>(bidWall.size(), bidWall.data());
+
+/*
+  auto o_tmp = platform->device.malloc<dfloat>(mesh->Nlocal);
+  platform->linAlg->fill(mesh->Nlocal, 1.0, o_tmp);
+  const dfloat area = mesh->surfaceIntegral(o_bIDWall.length(), o_bIDWall, o_tmp).at(0);
+*/
+
+  const dfloat scale = 2.0/1.0; // CD = F/(.5 rho U^2 ) = 2*F
+  auto o_Sij =nrs->strainRate(); 
+
+  // dbg print
+/*
+  std::vector<dfloat> sij_min(6,99.0e20);
+  std::vector<dfloat> sij_max(6,-99.0e20);
+  for (int i=0;i<6;i++) {
+    auto o_Sij_tmp = o_Sij + i*nrs->fieldOffset;
+    sij_min[i] = platform->linAlg->min(mesh->Nlocal, o_Sij_tmp, platform->comm.mpiComm);
+    sij_max[i] = platform->linAlg->max(mesh->Nlocal, o_Sij_tmp, platform->comm.mpiComm);
+  }
+  if (platform->comm.mpiRank == 0) {
+    printf("(rs)sij_min %d %.8e",tstep,time);
+    for (int i=0;i<6;i++) 
+      printf(" %.8e",sij_min[i]);
+    printf("\n");
+
+    printf("(rs)sij_max %d %.8e",tstep,time);
+    for (int i=0;i<6;i++) 
+      printf(" %.8e",sij_max[i]);
+    printf("\n");
+  }  
+  dfloat visc_min = platform->linAlg->min(mesh->Nlocal, nrs->o_mue, platform->comm.mpiComm);
+  dfloat visc_max = platform->linAlg->max(mesh->Nlocal, nrs->o_mue, platform->comm.mpiComm);
+  if (platform->comm.mpiRank == 0) {
+    printf("(rs)visc    %d %.8e %.8e %.8e\n",tstep,time,visc_min,visc_max);
+  }   
+*/
+
+  // vol flow rate is not implemented (p55)
+  // Need to check variable viscosity
+  Force dragv = compute_dragv(nrs, bidWall.size(), o_bidWall, o_Sij, scale);
+  Force dragp = compute_dragp(nrs, bidWall.size(), o_bidWall, nrs->o_P, scale);
+  o_Sij.free();
+
+  Force drag;
+  drag.x = dragp.x + dragv.x;
+  drag.y = dragp.y + dragv.y;
+  drag.z = dragp.z + dragv.z;
+
+  Force clcd;
+  clcd.x = drag.x*P_COS_AOA + drag.y*P_SIN_AOA;
+  clcd.y = -drag.x*P_SIN_AOA + drag.y*P_COS_AOA;
+  clcd.z = 0.0;
+
+  if (platform->comm.mpiRank == 0) {
+    printf("t-cd-cl %.6e %.6e %.6e %.6e %.6e %.6e %.6e \n",time,dragv.x,dragp.x,clcd.x,dragv.y,dragp.y,clcd.y);
+  }
+
+  //if (tstep % 10 == 0) { // TODO: copy viscosity to nek5000 for drag
+  //   double *visc = (double *)nek::scPtr(1);
+  //   nrs->o_mue.copyTo(visc, mesh->Nlocal);
+
+  //   nek::ocopyToNek(time, tstep);
+  //   nek::userchk();
+  //}
+
+  //if (tstep ==0) {
+  //   //.. copy variables {v, P} from GPU to CPU
+  //   nek::ocopyToNek(time, tstep);
+
+  //   nek::userchk();
+
+  //   //.. copy over variables from userchk() from CPU back to GPU
+  //   //nek::ocopyFromNek(time);
+
+  // }
+}

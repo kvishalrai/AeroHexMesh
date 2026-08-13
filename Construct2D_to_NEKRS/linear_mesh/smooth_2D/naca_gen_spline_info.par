@@ -1,0 +1,62 @@
+#
+# nek parameter file
+#
+[GENERAL] 
+
+#startFrom = base.fld time=0 
+
+stopAt = endTime
+endTime = 80.
+writeControl = runTime
+writeInterval = 0.01
+
+#dt =  5e-4
+timeStepper = bdf2
+variableDt = yes
+extrapolation = OIFS
+targetCFL = 3.0
+
+userParam01 =800.    # start time collecting statistics
+userParam02 = 20     # writeInterval 1D statistics
+
+dealiasing = yes
+# filtering = hpfrt #hpfrt, none, explicit
+# filtering = none
+# filterWeight = 10.0
+# filterCutoffRatio = 0.9
+
+[MESH]    
+numberOfBCFields=1 
+
+[PROBLEMTYPE]
+equation = incompNS
+stressFormulation = yes
+variableProperties = yes
+
+[PRESSURE]
+preconditioner = semg_xxt
+residualTol = 1e-6
+residualProj = yes
+
+[VELOCITY]
+residualTol = 1e-8
+residualProj = yes
+density = 1.0
+viscosity = -6.0e6
+advection = yes
+
+[TEMPERATURE]
+residualTol = 1.0e-6
+solver = none
+rhoCp = 1.0
+conductivity = -6.0e6
+
+# [SCALAR01]
+# residualTol = 1.0e-6
+# density = 1.0
+# diffusivity = -6.0e6
+# 
+# [SCALAR02]
+# residualTol = 1.0e-6
+# density = 1.0
+# diffusivity = -6.0e6

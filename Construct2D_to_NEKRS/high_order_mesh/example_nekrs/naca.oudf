@@ -1,0 +1,44 @@
+// Boundary conditions
+void codedFixedValueVelocity(bcData *bc)
+{
+  // Must match p_aoa/p_u0 in naca.par -- kernelInfo "defines/p_*" from
+  // UDF_LoadKernels are not visible in this coded-BC's compile context.
+  const dfloat aoa = 5.0;
+  const dfloat pi = std::atan(1.0)*4.0;
+  bc->u = cos(pi*aoa/180.0);
+  bc->v = sin(pi*aoa/180.0);
+  bc->w = 0.0;
+
+  // bc->u = bc->usrwrk[bc->idM + 0 * bc->fieldOffset];
+  // bc->v = bc->usrwrk[bc->idM + 1 * bc->fieldOffset];
+  // bc->w = bc->usrwrk[bc->idM + 2 * bc->fieldOffset];
+}
+
+//// Stabilized outflow (Dong et al)
+//void pressureDirichletConditions(bcData *bc)
+//{
+//  const dfloat iU0delta = 20.0;
+//  const dfloat un = bc->u * bc->nx + bc->v * bc->ny + bc->w * bc->nz;
+//  const dfloat s0 = 0.5 * (1.0 - tanh(un * iU0delta));
+//  bc->p = -0.5 * (bc->u * bc->u + bc->v * bc->v + bc->w * bc->w) * s0;
+//}
+@kernel void scalarScaledAdd(const dlong N,
+                             const dfloat a,
+                             const dfloat b,
+                             @ restrict const dfloat *X,
+                             @ restrict dfloat *Y)
+{
+  for (dlong n = 0; n < N; ++n; @tile(256, @outer, @inner)) {
+    if (n < N) {
+      Y[n] = a + b * X[n];
+    }
+  }
+}
+
+void codedFixedValueScalar(bcData *bc)
+{
+  bc->s = 0;
+  if (bc->scalarId == 0) {
+    bc->s = 0;
+  }
+}

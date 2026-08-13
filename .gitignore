@@ -34,6 +34,30 @@ wall_coords_*.dat
 # wherever -- no dedicated production-run directory is tracked here.
 /Construct2D_to_SOD2D/prod_run/
 
+# Construct2D_to_NEKRS/: no large generated mesh/geometry/binary/run-output
+# files are tracked -- regenerate via Construct2D_to_NEKRS/README.md.
+/Construct2D_to_NEKRS/linear_mesh/*.re2
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/*.re2
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/*.rea
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/*.ma2
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/geom_3x3*.dat
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/*.f0*
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/*.nek5000
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/SESSION.NAME
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/.state
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/makefile
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/nek5000
+/Construct2D_to_NEKRS/linear_mesh/smooth_2D/obj/
+/Construct2D_to_NEKRS/high_order_mesh/*/*.re2
+/Construct2D_to_NEKRS/high_order_mesh/*/*.ma2
+/Construct2D_to_NEKRS/high_order_mesh/*/geom_3x3*.dat
+/Construct2D_to_NEKRS/high_order_mesh/*/*.f0*
+/Construct2D_to_NEKRS/high_order_mesh/*/base.fld
+/Construct2D_to_NEKRS/high_order_mesh/*/newrea.out
+/Construct2D_to_NEKRS/high_order_mesh/*/cmake.log
+/Construct2D_to_NEKRS/high_order_mesh/*/.cache/
+/Construct2D_to_NEKRS/high_order_mesh/*/SESSION.NAME
+
 # Vendored/compiled binaries (rebuild from source)
 /Construct2D/construct2d
 /Construct2D/bin/x86_64/Linux/construct2d

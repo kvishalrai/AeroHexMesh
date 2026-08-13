@@ -1,0 +1,1513 @@
+#define INTP_NMAX 399 /* number of sample points */
+#define NUMBER_ELEMENTS_X  178
+#define NUMBER_ELEMENTS_Y  64
+#define NUMBER_ELEMENTS_Z  3
+c-----------------------------------------------------------------------
+c  nek5000 user-file template
+c
+c  user specified routines:
+c     - uservp  : variable properties
+c     - userf   : local acceleration term for fluid
+c     - userq   : local source term for scalars
+c     - userbc  : boundary conditions
+c     - useric  : initial conditions
+c     - userchk : general purpose routine for checking errors etc.
+c     - userqtl : thermal divergence for lowMach number flows 
+c     - usrdat  : modify element vertices 
+c     - usrdat2 : modify mesh coordinates
+c     - usrdat3 : general purpose routine for initialization
+c     
+c-----------------------------------------------------------------------
+      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+      integer ix,iy,iz,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      common /clcd/ U0,alpha,cos_alpha,sin_alpha
+
+      ux   = U0*cos_alpha
+      uy   = U0*sin_alpha
+      uz   = 0.0
+
+      temp = 0.
+
+      rcen = 2.0
+      epst = 0.25
+      xx   = x - 0.5
+      yy   = y - 0.0
+      rr   = sqrt(xx*xx+yy*yy)
+
+      fltrd= sstep(1.0  ,0.,rcen,epst,rr) ! tanh
+
+      if (ifield.eq.2) then
+         temp = 0.0
+      elseif (ifield.eq.3) then
+         temp = 1.0E-03 * fltrd
+      elseif (ifield.eq.4) then
+         temp = 1.0E-03 * fltrd
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer total_points
+
+c..      ifmpiio = .false.
+
+c      if (istep.eq.0) call gfldr('base.fld')
+c      write(*,*)'--||USRCHK DEBUG :: ISTEP', istep
+
+      if (istep.eq.0) then     ! In case the restart file overwrites geometry
+        call get_smooth_data  ! Smooth the blade surface geometry
+        call fix_geom
+        call geom_reset(1)
+      endif
+
+c      if (istep.eq.0) then
+c         call outpost2(vx,vy,vz,visfl,t,ldimt,'fld')
+c        call outpost2(vx,vy,vz,pr   ,t,ldimt,'ini')
+c      endif
+
+cccc..   restart with different initial values of temperature, k, and tau
+cc      if(istep.eq.0)then
+cc        total_points = lx1*ly1*lz1*lelv
+cc        rcen = 2.0
+cc        epst = 0.25
+cc        xx   = xm1(i,1,1,1) - 0.5
+cc        yy   = ym1(i,1,1,1) - 0.0
+cc        rr   = sqrt(xx*xx+yy*yy)
+cc
+cc        fltrd= sstep(1.0  ,0.,rcen,epst,rr) ! tanh
+cc
+cc        do i =1, total_points
+cc          t(i, 1, 1, 1, 1) = 0.0             !.. set temperature = 0.0
+cc          t(i, 1, 1, 1, 2) = 1.0E-03 * fltrd !.. set k   = 1.0E-03
+cc          t(i, 1, 1, 1, 3) = 1.0E-03 * fltrd !.. set tau = 1.0E-02
+cc        enddo
+cc      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat()   ! This routine to modify element vertices
+      include 'SIZE'
+      include 'TOTAL'
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer e, f
+      real    sn(3), sr(3), tol
+      real    tmp(lx1, ly1, lz1, nelt)
+      real    xmid, ymid, zmid
+      real    xref, yref, zref
+      real    dxref, dyref, dzref, rtmp
+
+      common /clcd/ U0,alpha,cos_alpha,sin_alpha
+
+      integer lt
+      parameter (lt=lx1*ly1*lz1*lelt)
+      real mask(lt), h1(lt), x0, x1
+
+      common /foilrot/ xcen, ycen, trot
+      real xrot, yrot
+      
+      ntot = nx1*ny1*nz1*nelt
+
+      xcen  = 1.
+      ycen  = 0.
+
+      U0    = 1.
+      alpha = 5.   ! in degrees
+      trot  = alpha
+
+      cos_alpha = cos(pi*alpha/180.)
+      sin_alpha = sin(pi*alpha/180.)
+
+      ux   = U0*cos_alpha
+      uy   = U0*sin_alpha
+      uz   = 0.0
+
+      if (nio.eq.0) write(*,*)'AOA = ', alpha
+
+      !Set all non-periodic BCs here. This is required by gmsh2nek
+      do iel=1,nelv
+         do ifc=1,2*ndim
+            id_face = bc(5,ifc,iel,1)
+            if (id_face.eq.1) then        ! Wall
+               cbc(ifc,iel,1) = 'W  '
+               boundaryID(ifc,iel) = 1
+            elseif (id_face.eq.2) then    ! Inlet
+               cbc(ifc,iel,1) = 'v  '
+               boundaryID(ifc,iel) = 2
+            elseif (id_face.eq.3) then    ! Outlet
+               cbc(ifc,iel,1) = 'O  '
+               boundaryID(ifc,iel) = 3
+            else                          ! Zero-out everything else
+               boundaryID(ifc,iel) = 0
+            endif
+         enddo
+      enddo
+
+cc      !Set all non-periodic BCs here. This is required by gmsh2nek
+cc      do iel=1,nelv
+cc         do ifc=1,2*ndim
+cc            id_face = bc(5,ifc,iel,1)
+cc            if (id_face.eq.1) then        ! Wall
+cc               cbc(ifc,iel,1) = 'W  '
+cc               boundaryID(ifc,iel) = 1
+cc            elseif (id_face.eq.2) then    ! Inlet
+ccc               cbc(ifc,iel,1) = 'v  '
+cc               cbc(ifc,iel,1) = 'W01'
+cc               boundaryID(ifc,iel) = 2
+cc            elseif (id_face.eq.3) then    ! Outlet
+ccc               cbc(ifc,iel,1) = 'O  '
+cc               cbc(ifc,iel,1) = 'W01'
+cc               boundaryID(ifc,iel) = 3
+cc            else                          ! Zero-out everything else
+cc               boundaryID(ifc,iel) = 0
+cc            endif
+cc         enddo
+cc      enddo
+
+cc      do e=1,nelv
+cc      do f=1,2*ldim
+cc
+cc         boundaryid(f,e) = 0
+cc
+cc         if (cbc(f,e,1).eq.'W  ') boundaryid(f,e) = 1
+cc         if (cbc(f,e,1).eq.'W01') then
+cc
+cc            tmp1 = 0.0
+cc            nxz = lx1*lz1
+cc
+cc            do i=1,nxz
+cc              tmp1 = tmp1 + ( unx(i,1,f,e)*ux
+cc     $                      + uny(i,1,f,e)*uy
+cc     $                      + unz(i,1,f,e)*uz)*area(i,1,f,e)
+cc            enddo
+cc
+cc            if (tmp1.lt.0) then
+cc               cbc(f,e,1) = 'v  '
+cc               boundaryid(f,e) = 2
+cc            else
+cc               cbc(f,e,1) = 'O  '
+cc               boundaryid(f,e) = 3
+cc            endif
+cc         endif
+cc
+cc      enddo
+cc      enddo
+
+
+
+c..   set the boundaryMap for the scalar k and tau
+      do e=1,nelt
+        do f=1,2*ndim
+          cbc(f,e,2) = cbc(f,e,1)
+          cbc(f,e,3) = cbc(f,e,1)
+          cbc(f,e,4) = cbc(f,e,1)
+          if (cbc(f,e,1) .eq. 'v  ') cbc(f,e,2) = 't  '
+          if (cbc(f,e,1) .eq. 'v  ') cbc(f,e,3) = 't  '
+          if (cbc(f,e,1) .eq. 'v  ') cbc(f,e,4) = 't  '
+
+          if (cbc(f,e,1) .eq. 'O  ') cbc(f,e,2) = 'O  '
+          if (cbc(f,e,1) .eq. 'O  ') cbc(f,e,3) = 'O  '
+          if (cbc(f,e,1) .eq. 'O  ') cbc(f,e,4) = 'O  '
+
+          if (cbc(f,e,1) .eq. 'o  ') cbc(f,e,2) = 'o  '
+          if (cbc(f,e,1) .eq. 'o  ') cbc(f,e,3) = 'o  '
+          if (cbc(f,e,1) .eq. 'o  ') cbc(f,e,4) = 'o  '
+
+          if (cbc(f,e,1) .eq. 'W  ') cbc(f,e,2) = 't  '
+          if (cbc(f,e,1) .eq. 'W  ') cbc(f,e,3) = 't  '
+          if (cbc(f,e,1) .eq. 'W  ') cbc(f,e,4) = 't  '
+        enddo
+      enddo
+
+      call get_smooth_data  ! Smooth the blade surface geometry
+      call fix_geom
+      call geom_reset(1)
+      call gen_rea(2)
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /walldist/ ywd(lx1,ly1,lz1,lelt)
+      real ywd
+      real ymax
+
+      real w1,w2,w3,w4,w5
+      common /SCRNS/
+     &     w1(lx1*ly1*lz1*lelv)
+     &     ,w2(lx1*ly1*lz1*lelv)
+     &     ,w3(lx1*ly1*lz1*lelv)
+     &     ,w4(lx1*ly1*lz1*lelv)
+     &     ,w5(lx1*ly1*lz1*lelv)
+
+      common /NRSSCPTR/ nrs_scptr(1)
+      integer*8 nrs_scptr
+
+      nxyz = lx1*ly1*lz1
+      ntot = nxyz*nelt
+
+      call cheap_dist(ywd,1,'W  ')
+      !call distf(ywd,1,'W  ',w1,w2,w3,w4,w5)
+      nrs_scptr(1) = loc(ywd(1,1,1,1))
+
+      ymax = glmax(ywd,ntot)
+
+cc      write(*,*) '--||NEK_CHECK :: ', ymax
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine get_smooth_data
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer e,eg,exy,ez,f
+
+      parameter (lelxy=NUMBER_ELEMENTS_X*NUMBER_ELEMENTS_Y) ! Number of elements in 2D airfoil section
+      common /ctmp2/ xy4(4*4,2,lelxy)
+
+      parameter (lw=lx1*ly1*lz1*lelt)
+      common /scruz/ w(lw)
+
+      n     = lx1*ly1*lz1*nelt
+      nface = 2*ldim
+
+      if (nid.eq.0) then
+
+       open (unit=31,file='geom_3x3_naca_gen_spline_info.dat')
+       do exy=1,lelxy
+       do i=1,4*4
+          read(31,*) xy4(i,1,exy),xy4(i,2,exy)
+       enddo
+       enddo
+       close(31)
+
+      endif
+
+      m   = 4*4*2                   ! Number of entries
+      call bcast(xy4,m*lelxy*wdsize) ! Broadcast: 0-->all ranks
+
+      do e=1,nelv                   ! Interpolate to each element
+        eg  = lglel(e)
+        e2d = mod1(eg,lelxy)
+        call map_m_to_n(xm1(1,1,1,e),lx1,xy4(1,1,e2d),4,if3d,w,lw)
+        call map_m_to_n(ym1(1,1,1,e),lx1,xy4(1,2,e2d),4,if3d,w,lw)
+
+        if (lz1.gt.1) then
+         lxy = lx1*ly1
+         do iz=2,lz1                 ! Extrude 1st layer to other GLL layers
+           call copy(xm1(1,1,iz,e),xm1(1,1,1,e),lxy)
+           call copy(ym1(1,1,iz,e),ym1(1,1,1,e),lxy)
+         enddo
+        endif
+
+      enddo
+
+c     call outpost(xm1,ym1,zm1,pr,t,'   ')
+
+      call geom_reset(1)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      function dongOutflow(ix,iy,iz,iel,iside,u0,delta)
+      include 'SIZE'
+      include 'SOLN'
+      include 'GEOM'
+      real sn(3)
+      ux = vx(ix,iy,iz,iel)
+      uy = vy(ix,iy,iz,iel)
+      uz = vz(ix,iy,iz,iel)
+      call getSnormal(sn,ix,iy,iz,iside,iel)
+      vn = ux*sn(1) + uy*sn(2) + uz*sn(3)
+      S0 = 0.5*(1.0 - tanh(vn/u0/delta))
+      dongOutflow = -0.5*(ux*ux+uy*uy+uz*uz)*S0
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine filter_length
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      common /Dgrdelm/ dxgrd(lelt), dygrd(lelt), dzgrd(lelt)
+     $               , dgrd  (lx1,ly1,lz1,lelt)
+
+      n   = lx1*ly1*lz1*lelt
+      nxyz= lx1*ly1*lz1
+
+      call rzero(dxgrd, lelt)
+      call rzero(dygrd, lelt)
+      call rzero(dzgrd, lelt)
+      call rzero(dgrd,  lelt)
+
+      do iel=1,nelv
+
+         xmax = vlmax(xm1(1,1,1,iel),nxyz)
+         xmin = vlmin(xm1(1,1,1,iel),nxyz)
+
+         ymax = vlmax(ym1(1,1,1,iel),nxyz)
+         ymin = vlmin(ym1(1,1,1,iel),nxyz)
+
+         zmax = vlmax(zm1(1,1,1,iel),nxyz)
+         zmin = vlmin(zm1(1,1,1,iel),nxyz)
+
+         dxgrd(iel)= (xmax - xmin)/float(lx1-1)
+         dygrd(iel)= (ymax - ymin)/float(ly1-1)
+         dzgrd(iel)= 0.
+         if(if3d) dzgrd(iel)= (zmax - zmin)/float(lz1-1)
+c         dd = (dxgrd(iel)*dygrd(iel)*dzgrd(iel))**(1./3.)
+         dd1= max(dxgrd(iel),dygrd(iel))
+         dd = max(dd1,       dzgrd(iel))
+         call cfill(dgrd(1,1,1,iel),dd,nxyz)
+
+         if(nid.eq.0) write(*,'(A,I4,6(1X,G14.7))') ' iel =', iel
+     $                        ,xmin, xmax, ymin, ymax, zmin, zmax
+         if(nid.eq.0) write(*,'(A,I4,4(1X,G14.7))') ' iel =', iel
+     $       , dxgrd(iel), dygrd(iel), dzgrd(iel), dgrd(1,1,1,iel)
+      enddo
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine post_minmax
+      include 'SIZE'
+      include 'TOTAL'
+
+      parameter (lxyz=lx1*ly1*lz1)
+      common /rans_usr/ ifld_k, ifld_omega, m_id
+      integer ifld_k,ifld_omega, m_id
+
+      common/visturb/ anu(lx1,ly1,lz1,lelv)
+     $               ,srk(lx1,ly1,lz1,lelv)
+     $               ,sro(lx1,ly1,lz1,lelv)
+
+      common/tangstrain/ tangst(lx1,ly1,lz1,lelv)
+
+      real dudx(lx1,ly1,lz1,lelv)
+     $    ,dudy(lx1,ly1,lz1,lelv)
+     $    ,dudz(lx1,ly1,lz1,lelv)
+
+      n = nx1*ny1*nz1*nelt
+
+      call gradm1 (dudx,dudy,dudz,VX)
+      call col2   (dudy,bm1       ,n)
+      call dssum  (dudy, nx1,ny1,nz1)
+      call col2   (dudy,binvm1    ,n)
+
+      call copy   (tangst,dudy    ,n)
+
+      tmin = glmin(t ,n)
+      tmax = glmax(t ,n)
+      umax = glmax(vx,n)
+      umin = glmin(vx,n)
+      vmax = glmax(vy,n)
+      vmin = glmin(vy,n)
+      dumax = glmax(dudy ,n)
+
+      akmax = glmax(T(1,1,1,1,ifld_k-1),n)
+      akmin = glmin(T(1,1,1,1,ifld_k-1),n)
+
+      o_max = glmax(T(1,1,1,1,ifld_omega-1),n)
+      o_min = glmin(T(1,1,1,1,ifld_omega-1),n)
+
+c      dmin = akmax/param(2)/dumax
+      dmax = sqrt(dumax/param(2))
+      dmin = param(2)*dmax
+
+      do ie = 1,nelv
+      do k = 1,nz1
+      do j = 1,ny1
+      do i = 1,nx1
+! solve for omega pert
+      uux = vx(i,j,k,ie)
+      uuy = vy(i,j,k,ie)
+      anu(i,j,k,ie)=vdiff(i,j,k,ie,1) !rans_komg_mut(i,j,k,ie)
+      srk(i,j,k,ie)=0.                !rans_komg_kSrc(i,j,k,ie)
+      sro(i,j,k,ie)=0.                !rans_komg_omgSrc(i,j,k,ie)
+
+      enddo
+      enddo
+      enddo
+      enddo
+
+      anu_max = glmax(anu,n)
+      anu_min = glmin(anu,n)
+
+      if (nid.eq.0) then
+           write(6,2) istep,dt,time,umin,umax,' u-max'
+           write(6,2) istep,dt,time,vmin,vmax,' v-max'
+           write(6,2) istep,dt,time,tmin,tmax,' t-max'
+           write(6,2) istep,dt,time,akmin,akmax,' K-max'
+           write(6,2) istep,dt,time,o_min,o_max,' O-max'
+           write(6,2) istep,dt,time,dmin,dmax,' Cf-max'
+           write(6,2) istep,dt,time,anu_min,anu_max,' nu-max'
+           write(6,2) istep,dt,time,anu_min*param(2)
+     $        ,anu_max*param(2),' nu-ratio'
+      endif
+
+ 2     format(i9,4e17.7,a8)
+c       if(mod(istep,iostep).eq.0 .and. istep.ge.0) then
+       if(istep.eq.0 .or. ifoutfld) then
+          call outpost2(anu,srk,vz,sro,t,3,'dif')
+       endif
+c       if(time.gt.25. .and. time.le.25.01) then
+c          call outpost2(vx,vy,vz,pr,t,ldimt,'   ')
+c          if(time.eq.25.01) call exitt
+c       endif
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+
+       real function sstep(vbs,vas,sp,epsmr,r)
+
+c      Smooth Step Function
+c      Create a smooth jump from vbs,vas (if r is increasing)
+c      with a inflection point sp and a smoothness factor epsmr
+c      (epsmr->0 discontinous jump)
+c      r denotes the independent variable
+
+       real vbs,vas,sp,r,epsmr
+       real delta,aid
+
+       delta = (vas-vbs)
+       aid =  0.5*delta*(tanh((r-sp)/epsmr) + 1.0) + vbs
+       sstep = aid !max(1e-15,aid)
+
+       return
+       end
+
+c------------------------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine cpcf
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      real xint(INTP_NMAX),yint(INTP_NMAX),zint(INTP_NMAX)
+      save xint, yint, zint
+      save igs_z
+
+      real xfoil(INTP_NMAX),yfoil(INTP_NMAX)
+      save xfoil, yfoil
+
+c     statistics start time and output frequency
+      real tstatstar, tstatfreq
+
+      real x0(3)
+      data x0 /0.0, 0.0, 0.0/ 
+      save x0
+
+      integer icalld
+      save    icalld
+      data    icalld /0/
+
+      real atime,timel
+      save atime,timel
+
+      integer ntdump
+      save    ntdump
+      
+      real    rwk(INTP_NMAX,ldim+1) ! r, s, t, dist2
+      integer iwk(INTP_NMAX,3)      ! code, proc, el 
+      save    rwk, iwk
+
+      integer nint, nint2, intp_h, intp_h2
+      save    nint, nint2, intp_h, intp_h2
+
+      logical iffpts
+      save iffpts
+
+      real ndfac
+
+      parameter(nstat=11)
+      real ravg(lx1*ly1*lz1*lelt,nstat)
+      real stat(lx1*ly1*lz1*lelt,nstat)
+      real stat_y(INTP_NMAX*nstat)
+
+      save ravg, stat, stat_y
+
+      logical ifverbose
+      common /gaaa/    wo1(lx1,ly1,lz1,lelv)
+     &              ,  wo2(lx1,ly1,lz1,lelv)
+     &              ,  wo3(lx1,ly1,lz1,lelv)
+
+      common /gbbb/    wk1(lx1,ly1,lz1,lelv)
+     &              ,  wk2(lx1,ly1,lz1,lelv)
+     &              ,  wk3(lx1,ly1,lz1,lelv)
+
+      common /foilrot/ xcen, ycen, trot
+      real xrot, yrot
+      real xx, yy
+
+      integer n, lt
+      parameter (lt=lx1*ly1*lz1*lelt)
+
+      real dudx(lx1,ly1,lz1,lelt)
+     $   , dudy(lx1,ly1,lz1,lelt)
+     $   , dudz(lx1,ly1,lz1,lelt)
+     $   , dvdx(lx1,ly1,lz1,lelt)
+     $   , dvdy(lx1,ly1,lz1,lelt)
+     $   , dvdz(lx1,ly1,lz1,lelt)
+     $   , dwdx(lx1,ly1,lz1,lelt)
+     $   , dwdy(lx1,ly1,lz1,lelt)
+     $   , dwdz(lx1,ly1,lz1,lelt)
+     
+      real my_unx(lx1,lz1,6,lelt)
+     $   , my_uny(lx1,lz1,6,lelt)
+     $   , my_unz(lx1,lz1,6,lelt)
+     $   , my_t1x(lx1,lz1,6,lelt)
+     $   , my_t1y(lx1,lz1,6,lelt)
+     $   , my_t1z(lx1,lz1,6,lelt)
+     
+      common /my_vec/ my_unx, my_uny, my_unz, my_t1x, my_t1y, my_t1z
+
+      real cf_coef(lx1,ly1,lz1,lelt), tau_w
+      real cp_coef(lx1,ly1,lz1,lelt)
+
+      integer e,f,ix,iy,iz,kx1,kx2,ky1,ky2,kz1,kz2,ia
+
+      common /uvwavt/uavgt(lx1,ly1,lz1,lelv)
+     &              ,vavgt(lx1,ly1,lz1,lelv)
+     &              ,wavgt(lx1,ly1,lz1,lelv)
+     &              ,pavgt(lx1,ly1,lz1,lelv)
+     &              ,muavt(lx1,ly1,lz1,lelv)
+     &              ,urmst(lx1,ly1,lz1,lelv)
+     &              ,vrmst(lx1,ly1,lz1,lelv)
+     &              ,wrmst(lx1,ly1,lz1,lelv)
+     &              ,uvmmt(lx1,ly1,lz1,lelv)
+     &              ,vwmmt(lx1,ly1,lz1,lelv)
+     &              ,uwmmt(lx1,ly1,lz1,lelv)
+
+      ! for 3D, one needs to figure out the tangential direction t1x/t2x
+      if (ldim.eq.2) call exitti('2D is not ready$',1)
+
+      tstatstar = uparam(1)
+      tstatfreq = uparam(2)
+
+      nelx  = NUMBER_ELEMENTS_X
+      nely  = NUMBER_ELEMENTS_Y
+      nelz  = NUMBER_ELEMENTS_Z
+
+      if(istep.eq.0) call gtpp_gs_setup(igs_z,nelx*nely,1   ,nelz,3) ! z-avg
+
+      if (time.lt.tstatstar) return
+
+      n     = nx1*ny1*nz1*nelv
+
+      ! set up normal for 3d
+      if (istep.eq.0) then ! Assume the 3D mesh is extreded from a 2D mesh using n2to3
+        call sey_my_vec(my_unx,my_uny,my_unz
+     $                 ,my_t1x,my_t1y,my_t1z)
+      endif
+
+      if(icalld.eq.0) then
+cc        if(nid.eq.0) write(6,*) 'Start collecting cpcf statistics ...'
+cc        if(nid.eq.0) write(6,*) 'foil rotation', xcen, ycen, trot, pi
+cc
+cc        call interp_setup(intp_h,0.0,0,nelv)
+cc        nint = 0
+cc        if (nid.eq.0) then
+cc          cos_alpha = cos(pi*trot/180)
+cc          sin_alpha = sin(pi*trot/180)
+cc          nint = INTP_NMAX
+cc          open (unit=31,file='naca_foil.dat')
+cc          do i = 1,INTP_NMAX
+cc             read(31,*) xfoil(i),yfoil(i),zint(i)
+cc             xx = xfoil(i)-xcen
+cc             yy = yfoil(i)-ycen
+cc             xrot = xx*cos_alpha+yy*sin_alpha
+cc             yrot = -xx*sin_alpha+yy*cos_alpha
+cc             xx = xrot + xcen
+cc             yy = yrot + ycen
+cc             xint(i) = xx
+cc             yint(i) = yy
+cc          enddo
+cc          close(31)
+cc        endif
+cc        iffpts = .true. ! dummy call to find points
+cc
+cc        call interp_nfld(stat_y,ravg,1,xint,yint,zint,nint,
+cc     $                   iwk,rwk,INTP_NMAX,iffpts,intp_h)
+cc        iffpts = .false.
+
+        call rzero(ravg,size(ravg))
+        atime     = 0
+        timel     = time
+        ntdump    = int(time/tstatfreq)
+
+        icalld = 1
+      endif
+
+      dtime = time - timel
+      atime = atime + dtime
+
+      ! averaging over time
+      if (atime.ne.0. .and. dtime.ne.0.) then
+        beta      = dtime / atime
+        alpha     = 1. - beta
+
+        ifverbose = .false.
+        call avg1(ravg(1,1),pr   ,alpha,beta,n,'pavg',ifverbose)
+        call avg1(ravg(1,2),vx   ,alpha,beta,n,'uavg',ifverbose)
+        call avg1(ravg(1,3),vy   ,alpha,beta,n,'vavg',ifverbose)
+        call avg1(ravg(1,4),vz   ,alpha,beta,n,'wavg',ifverbose)
+
+        call avg2(ravg(1,5),vx   ,alpha,beta,n,'urms',ifverbose)
+        call avg2(ravg(1,6),vy   ,alpha,beta,n,'vrms',ifverbose)
+        call avg2(ravg(1,7),vz   ,alpha,beta,n,'wrms',ifverbose)
+        call avg3(ravg(1,8),vx,vy,alpha,beta,n,'uvmm',ifverbose)
+        call avg3(ravg(1,9),vx,vz,alpha,beta,n,'uwmm',ifverbose)
+        call avg3(ravg(1,10),vy,vz,alpha,beta,n,'vwmm',ifverbose)
+
+        call avg1(ravg(1,11),vdiff,alpha,beta,n,'navg',ifverbose)
+
+
+      endif
+
+      timel = time
+
+      ! write statistics to file
+      if(istep.gt.0 .and. time.gt.(ntdump+1)*tstatfreq) then
+         ! averaging over statistical homogeneous directions (x-z)
+         do i = 1,nstat
+            call planar_avg(stat(1,i),ravg(1,i)      ,igs_z)
+         enddo
+
+c        Calculate average velocity gradient
+
+         call opgrad(dudx,dudy,dudz,stat(1,2))
+         call opgrad(dvdx,dvdy,dvdz,stat(1,3))
+         call opdssum(dudx,dudy,dudz)
+         call opdssum(dvdx,dvdy,dvdz)
+         call opcolv(dudx,dudy,dudz,binvm1)
+         call opcolv(dvdx,dvdy,dvdz,binvm1)
+         if (ldim.eq.3) then
+           call opgrad(dwdx,dwdy,dwdz,stat(1,4))
+           call opdssum(dwdx,dwdy,dwdz)
+           call opcolv(dwdx,dwdy,dwdz,binvm1)
+         endif
+
+         ! cp/cf coef
+         call rzero(cf_coef,n)
+         call rzero(cp_coef,n)
+         call planar_avg(wo1,ravg(1,1)      ,igs_z)
+         do e=1,nelv
+         do f=1,2*ldim
+           if (cbc(f,e,1).eq.'W  ') then ! airfoil
+             call facind(kx1,kx2,ky1,ky2,kz1,kz2,lx1,ly1,lz1,f)
+             ia = 0
+             do iz=kz1,kz2
+             do iy=ky1,ky2
+             do ix=kx1,kx2
+               ia = ia + 1
+
+               if (ldim.eq.2) then ! this is ok since ldim is visible to compiler
+               tau_w = ( dudx(ix,iy,iz,e) * t1x(ia,1,f,e)
+     $           + dvdx(ix,iy,iz,e) * t1y(ia,1,f,e) ) * unx(ia,1,f,e)
+     $           + ( dudy(ix,iy,iz,e) * t1x(ia,1,f,e)
+     $           + dvdy(ix,iy,iz,e) * t1y(ia,1,f,e) ) * uny(ia,1,f,e)
+               else
+               tau_w =(dudx(ix,iy,iz,e)*my_t1x(ia,1,f,e)
+     $           +dvdx(ix,iy,iz,e)*my_t1y(ia,1,f,e)
+     $           +dwdx(ix,iy,iz,e)*my_t1z(ia,1,f,e))*my_unx(ia,1,f,e)
+     $           +(dudy(ix,iy,iz,e)*my_t1x(ia,1,f,e)
+     $           +dvdy(ix,iy,iz,e)*my_t1y(ia,1,f,e)
+     $           +dwdy(ix,iy,iz,e)*my_t1z(ia,1,f,e))*my_uny(ia,1,f,e)
+     $           +(dudz(ix,iy,iz,e)*my_t1x(ia,1,f,e)
+     $           +dvdz(ix,iy,iz,e)*my_t1y(ia,1,f,e)
+     $           +dwdz(ix,iy,iz,e)*my_t1z(ia,1,f,e))*my_unz(ia,1,f,e)
+               endif
+
+               ! tau =  nu * d ut/ d yn
+               tau_w = vdiff(ix,iy,iz,e,1) * tau_w
+
+               ! cf = 2*rho*tau
+               cf_coef(ix,iy,iz,e) = 2.0 * vtrans(ix,iy,iz,e,1) * tau_w
+
+               ! cp = 2*Pavg
+               cp_coef(ix,iy,iz,e) = 2.0*wo1(ix,iy,iz,e)
+
+             enddo
+             enddo
+             enddo
+           endif
+         enddo
+         enddo
+
+
+         ! print values on surface into cf.out
+         call my_dump_data_on_surface(cp_coef,cf_coef,'W  ')
+
+         ! store span averaged data for writing
+         call copy(pavgt,stat(1,1),n)
+         call copy(uavgt,stat(1,2),n)
+         call copy(vavgt,stat(1,3),n)
+         call copy(wavgt,stat(1,4),n)
+         call copy(urmst,stat(1,5),n)
+         call copy(vrmst,stat(1,6),n)
+         call copy(wrmst,stat(1,7),n)
+         call copy(uvmmt,stat(1,8),n)
+         call copy(uwmmt,stat(1,9),n)
+         call copy(vwmmt,stat(1,10),n)
+         call copy(muavt,stat(1,11),n)
+
+cc         ! extract data along wall normal direction (1D profile)
+cc         call interp_nfld(stat_y,stat,nstat,xint,yint,zint,nint,
+cc     $                    iwk,rwk,INTP_NMAX,iffpts,intp_h)
+
+         ntdump = ntdump + 1
+         if (nid.ne.0) goto 998 
+
+         rho    = param(1)
+         dnu    = param(2)
+         ndfac  = 2.
+
+cc         write(6,*) 'Dumping statistics ...'
+cc 
+cc         open(unit=58,file='NekCpCfData_1D.csv')
+cc         write(58,'(A)',advance='no') 'Points:0,Points:1,Points:2'
+cc         write(58,'(A)',advance='yes') ',AVGCP,AVGCF'
+cc         write(58,'(A,1pe11.4)',advance='yes') '#time=', time
+cc         do i = 1,nint
+cc            write(58,33) 
+cc     &        xfoil(i),
+cc     &        yfoil(i),
+cc     &        zint(i),
+cc     &        ndfac*stat_y(0*nint+i),        !cp
+cc     &        ndfac*dnu*stat_y(3*nint+i)     !cf
+cc
+ccc     &        ndfac*dnu*sqrt(stat_y(1*nint+i)**2+stat_y(2*nint+i)**2
+ccc     &            + stat_y(4*nint+i)**2+stat_y(5*nint+i)**2)     !cf
+cc
+cc  33         format(*(E17.9,:,","))
+cc         enddo
+cc         close(58)
+
+ 998  endif
+      
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine sey_my_vec(my_unx,my_uny,my_unz
+     $                     ,my_t1x,my_t1y,my_t1z)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      real my_unx(lx1,lz1,6,lelt)
+     $   , my_uny(lx1,lz1,6,lelt)
+     $   , my_unz(lx1,lz1,6,lelt)
+     $   , my_t1x(lx1,lz1,6,lelt)
+     $   , my_t1y(lx1,lz1,6,lelt)
+     $   , my_t1z(lx1,lz1,6,lelt)
+      real nx,ny,tmp
+      integer e,f,i
+
+      call copy (my_unx,unx,lx1*lz1*6*lelv)
+      call copy (my_uny,unx,lx1*lz1*6*lelv)
+
+      call rzero(my_unz,lx1*lz1*6*lelv)
+      call rzero(my_t1z,lx1*lz1*6*lelv)
+
+      ! TODO: check the corner?
+      call nekgsync
+      do e=1,nelv
+      do f=1,2*ldim
+         do i=1,lx1*lz1
+            nx = my_unx(i,1,f,e)
+            ny = my_uny(i,1,f,e)
+
+            tmp = 1.0 / sqrt(nx*nx+ny*ny)
+            nx = nx * tmp
+            ny = ny * tmp
+
+            my_unx(i,1,f,e) = nx
+            my_uny(i,1,f,e) = ny
+
+            my_t1x(i,1,f,e) =  ny
+            my_t1y(i,1,f,e) = -nx
+         enddo
+      enddo
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine my_dump_data_on_surface(ptmp,utmp,cb3)
+      implicit none
+      include 'SIZE'
+      include 'PARALLEL'
+      real ptmp(lx1,ly1,lz1,lelt)
+      real utmp(lx1,ly1,lz1,lelt)
+      character*3 cb3
+      integer idum,inid,mtype
+
+      idum = 1
+      if(nid.eq.0) then
+        ! rank 0's data
+        call my_dump_surface1(ptmp,utmp,cb3)
+
+        do inid=1,np-1
+           mtype = inid
+           call csend(mtype,idum,4,inid,0)         ! handshake to start
+           call crecv(mtype,idum,4)                ! handshake after finish 
+        enddo
+      else
+        mtype = nid
+        call crecv(mtype,idum,4)                ! hand-shake to start
+
+        ! rank nid's data
+        call my_dump_surface1(ptmp,utmp,cb3)
+
+        call csend(mtype,nid,4,0,0)            ! send when it's done
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine my_dump_surface1(ptmp,utmp,cb3)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      real ptmp(lx1,ly1,lz1,lelt)
+      real utmp(lx1,ly1,lz1,lelt)
+      integer e,eg,f,ix,iy,iz,kx1,kx2,ky1,ky2,kz1,kz2,ia
+      character*3 cb3
+      integer icalld
+      save icalld
+      data icalld /0/
+
+c      if (icalld.eq.0.AND.nid.eq.0) then
+      if (nid.eq.0) then
+         open(unit=90,file='NekBndData_1D.csv')
+         write(90,'(A)',advance='no') 'Points:0,Points:1,Points:2'
+         write(90,'(A)',advance='yes') ',AVGCP,AVGCF'
+         write(90,'(A,1pe11.4)',advance='yes') '#time=', time
+         icalld = 1
+      else
+         open(unit=90,file='NekBndData_1D.csv'
+     $        ,position='append',status='old')
+      endif
+
+      do e=1,nelv
+      do f=1,2*ldim
+        if (cbc(f,e,1).eq.cb3) then ! airfoil
+          call facind(kx1,kx2,ky1,ky2,kz1,kz2,lx1,ly1,lz1,f)
+          ia = 0
+          do iz=kz1,kz2
+          do iy=ky1,ky2
+          do ix=kx1,kx2
+	    ia = ia + 1
+            write(90,33) xm1(ix,iy,iz,e),ym1(ix,iy,iz,e)
+     $              ,zm1(ix,iy,iz,e),ptmp(ix,iy,iz,e),utmp(ix,iy,iz,e)
+          
+          enddo
+          enddo
+          enddo
+        endif
+      enddo
+      enddo
+
+    7 format(i10,1p1e16.8,i4,i10,1p3e16.8)
+   33 format(*(E17.9,:,","))
+      close(90)
+
+      return
+      end
+c-----------------------------------------------------------------------
+c------------------------------------------------------------------------------------
+      subroutine set_airfoil_bc
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real vtmp(lx1,ly1,lz1,lelt),sn(3)
+     $   , vmid,xmid,ymid,zmid,xref,yref,zref,dot
+      integer e,f,n,kx1,kx2,ky1,ky2,kz1,kz2
+     $      , imid,jmid,kmid
+
+      ! a ref point that is inside airfoil
+      xref = 0.2
+      yref = 0.0
+      zref = 0.0
+
+      n = lx1*ly1*lz1*nelt
+
+      call rone(vtmp,n)
+      call dssum(vtmp,lx1,ly1,lz1)
+
+      do e=1,nelt
+      do f=1,2*ldim
+
+        call facind (kx1,kx2,ky1,ky2,kz1,kz2,lx1,ly1,lz1,f)
+        imid = (kx1+kx2)/2
+        jmid = (ky1+ky2)/2
+        kmid = (kz1+kz2)/2
+
+        xmid = xm1(imid,jmid,kmid,e)
+        ymid = ym1(imid,jmid,kmid,e)
+        zmid = zm1(imid,jmid,kmid,e)
+        vmid = vtmp(imid,jmid,kmid,e)
+
+        call getSnormal(sn,imid,jmid,kmid,f,e)
+
+        if (vmid.lt.1.5) then ! boundary face
+          dot = (xmid-xref)*sn(1)+(ymid-yref)*sn(2)+(zmid-zref)*sn(3) 
+          if (dot.lt.0.0) then
+            cbc(f,e,1) = 'W  '
+          else
+            if (sn(1).lt.0.0) then
+              cbc(f,e,1) = 'v  '
+            else
+              cbc(f,e,1) = 'O  '
+            endif
+          endif
+        endif
+      enddo
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine rescale_chord(x0,x1)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      real msk(lx1*ly1*lz1*lelt)
+      real rtmp(lx1*ly1*lz1*lelt)
+      integer e,f,i,n
+      real x0,x1,x,xwmin0,xwmax0,xwmin1,xwmax1,glmin,glmax
+
+      n = lx1*ly1*lz1*nelt
+
+      ! chk chord length, make sure x in [0,1]
+      call rone(msk,n)
+      do e=1,nelt
+      do f=1,2*ldim
+         if (cbc(f,e,1).eq.'W  ') call facev(msk,e,f,0.0,lx1,ly1,lz1)
+      enddo
+      enddo
+      call dsop(msk,'mul',lx1,ly1,lz1)
+
+      call rzero(rtmp,n)
+      do i=1,n
+         rtmp(i) = (1.0 - msk(i)) * xm1(i,1,1,1)
+      enddo
+      xwmin0 = glmin(rtmp,n)
+      xwmax0 = glmax(rtmp,n)
+
+      do i=1,n
+         x = xm1(i,1,1,1)
+         xm1(i,1,1,1) = x0 + (x-xwmin0)*(x1-x0)/(xwmax0-xwmin0)
+      enddo
+
+      call fix_geom(1)
+
+      call rzero(rtmp,n)
+      do i=1,n
+         rtmp(i) = (1.0 - msk(i)) * xm1(i,1,1,1)
+      enddo
+      xwmin1 = glmin(rtmp,n)
+      xwmax1 = glmax(rtmp,n)
+      if (nio.eq.0) then
+         write(*,*)'chk chord length: before',xwmin0,xwmax0
+         write(*,*)'chk chord length: after ',xwmin1,xwmax1
+      endif
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine pj_set_mask(cb3,mask)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      character cb3
+      integer e,f,n,lt
+      parameter (lt=lx1*ly1*lz1*lelt)
+      real mask(lt)
+
+      n = lx1*ly1*lz1*nelt
+      ! set mask
+      call rone(mask,n) 
+      do e=1,nelt
+      do f=1,ldim*2
+        if (cbc(f,e,1).eq.cb3) then
+          call facev(mask,e,f,0.0,nx1,ny1,nz1)
+        endif
+      enddo
+      enddo
+      call dsop(mask,'*  ',nx1,ny1,nz1)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine pj_set_h1(cb3,h1)
+      implicit none
+      include 'SIZE'
+      integer i,n,lt
+      parameter (lt=lx1*ly1*lz1*lelt)
+      real h1(lt), dwall(lt), amp, delta_bl, delta_tr, arg
+      character*3 cb3
+
+      n = lx1*ly1*lz1*nelt
+
+      call cheap_dist(dwall,1,cb3)   ! distance to Wall=spheres
+
+      amp  = 20.0
+      delta_bl = 0.01 ! protected length
+      delta_tr = 0.1  ! bdry length
+      do i=1,n
+         arg = - (dwall(i)-3.0*delta_bl)/delta_tr
+         h1(i) = 1.0 + amp*0.5*(tanh(arg)+1.0)
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine pj_x_onto_airfoil(xmin,xmax,xold,yold,xnew,ynew)
+c     interval bisection
+      implicit none
+      include 'SIZE' ! nio
+      
+      real xmin, xmax, xold, yold, xnew, ynew, sgn, airfoil_geom
+      real tol, del, eps, tau, a, b, x1, x2, y1, y2, f1, f2, fs
+      integer it, Nit
+      
+      Nit = 100
+      tol = 1e-6
+      del = 0.1
+      eps = 1e-6      
+      tau = 0.5*(sqrt(5.0)-1.0)
+
+      if (xold.le.(xmin+eps)) then
+         xnew = xmin
+         ynew = 0.0
+         return
+      endif
+      if (xold.ge.(xmax-eps)) then
+         xnew = xmax
+         ynew = 0.0
+         return
+      endif
+      
+      sgn = 1.0
+      if (yold.lt.0.0) sgn = -1.0
+
+      it = 0
+
+      a = max(xold - del, xmin + eps*2.0)
+      b = min(xold + del, xmax - eps*2.0)
+
+      x1 = a + (1.0-tau)*(b-a)
+      x2 = a + tau*(b-a)
+   
+      y1 = airfoil_geom(x1,sgn)
+      f1 = (x1-xold)**2 + (y1-yold)**2
+
+      y2= airfoil_geom(x2,sgn)
+      f2 = (x2-xold)**2 + (y2-yold)**2
+
+      do while (it.lt.Nit.and.(b-a).gt.tol) 
+
+         it = it + 1
+         if (f1.gt.f2) then
+            a = x1
+            x1 = x2
+            f1 = f2
+            x2 = a + tau*(b-a)
+            y2 = airfoil_geom(x2,sgn)
+            f2 = (x2-xold)**2 + (y2-yold)**2
+         else
+            b = x2
+            x2 = x1
+            f2 = f1
+            x1 = a + (1.0-tau)*(b-a)
+            y1 = airfoil_geom(x1,sgn)
+            f1 = (x1-xold)**2 + (y1-yold)**2
+         endif
+
+      enddo
+      
+      if (f1.lt.f2) then
+         xnew = x1
+         ynew = y1
+         fs = f1
+      else
+         xnew = x2
+         ynew = y2
+         fs = f2
+      endif
+
+c     write(*,*)'it',nid,it,xold,xnew,fs,abs(x2-x1),abs(f2-f1)
+      
+      return
+      end
+C-----------------------------------------------------------------------
+      subroutine pj_onto_surface(cb3,x0,x1,mask,h1,tol,alpha)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      character*3 cb3
+      integer lt, n, jtype, imx, e,f,i
+      parameter (lt=lx1*ly1*lz1*lelt)
+      real xo3(lt,3), xd3(lt,3), h1(lt), h2(lt), mask(lt), dwall(lt)
+      real x0,x1,xdmx,ydmx,zdmx,alpha,tol,glamax
+
+      real appxx,appxy,appxz
+      integer nappxx,nappxy,nappxz
+      common/mygeomx1/appxx(lt,mxprev),appxy(lt,mxprev),appxz(lt,mxprev)
+      common/mygeomn1/nappxx(2),nappxy(2),nappxz(2)
+
+      jtype = 1 ! 1=solve laplace
+      imx=2000  ! maxit
+      n = lx1*ly1*lz1*nelt
+   
+      if (nio.eq.0) write(*,*)'proj onto surface',alpha,tol,cb3,jtype
+
+      ! set geom
+      call opcopy(xo3(1,1),xo3(1,2),xo3(1,3),xm1,ym1,zm1)
+      call pj_set_boundary_location(x0,x1,mask,xo3)
+      call opsub3(xd3(1,1),xd3(1,2),xd3(1,3)
+     $           ,xo3(1,1),xo3(1,2),xo3(1,3),xm1,ym1,zm1)
+
+      xdmx=glamax(xd3(1,1),n)
+      ydmx=glamax(xd3(1,2),n)
+      if (nio.eq.0) write(6,*) xdmx,' max x displacement'
+      if (nio.eq.0) write(6,*) ydmx,' max y displacement'
+      if (ldim.eq.3) then
+        zdmx=glamax(xd3(1,3),n)
+        if (nio.eq.0) write(6,*) zdmx,' max z displacement'
+      endif
+      
+      if (jtype.gt.0) then
+        
+        call rzero(h2,n)
+
+        call laplaceh('delx',xd3(1,1),h1,h2,mask
+     $               ,vmult,1,tol,imx,appxx,nappxx)
+        call laplaceh('dely',xd3(1,2),h1,h2,mask
+     $               ,vmult,1,tol,imx,appxy,nappxy)
+        if(ldim.eq.3) then
+          call laplaceh('delz',xd3(1,3),h1,h2,mask
+     $                 ,vmult,1,tol,imx,appxz,nappxz)
+        endif
+      endif
+
+      call cmult (xd3(1,1),alpha,n)
+      call cmult (xd3(1,2),alpha,n)
+      if(ldim.eq.3) call cmult (xd3(1,3),alpha,n)
+      call opadd2(xm1,ym1,zm1,xd3(1,1),xd3(1,2),xd3(1,3))
+
+      call fix_geom(1)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine pj_set_boundary_location(xmin,xmax,mask,xo3)
+      implicit none
+      include 'SIZE'
+
+      integer i,n,lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      real xmin,xmax,x,y,xnew,ynew,mask(1),xo3(lt,3)
+
+      n = lx1*ly1*lz1*nelt
+      do i=1,n
+      if (mask(i).lt.0.5) then
+         x = xo3(i,1)
+         y = xo3(i,2)
+
+         call pj_x_onto_airfoil(xmin,xmax,x,y,xnew,ynew) ! goldorn search
+
+         xo3(i,1) = xnew
+         xo3(i,2) = ynew
+      endif
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine laplaceh(name,u,h1,h2,mask,mult,ifld
+     $                   ,tli,maxi,approx,napprox)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CTIMER'
+
+      common  /cprint/ ifprint, ifhzpc
+      logical          ifprint, ifhzpc
+
+      character*4 name
+      real u(1),h1(1),h2(1),mask(1),mult(1),approx(1)
+      integer   napprox(1)
+
+      parameter (lt=lx1*ly1*lz1*lelt)
+      common /scruz/ r (lt),ub(lt)
+
+      logical ifstdh
+      character*4  cname
+      character*6  name6
+
+      integer icalled
+      save icalled 
+      data icalled /0/
+
+      logical ifwt,ifvec,ifverb
+
+      call chcopy(cname,name,4)
+      call capit (cname,4)
+
+      call blank (name6,6)
+      call chcopy(name6,name,4)
+      ifverb = .false.
+      ifwt  = .true.
+      ifvec = .false.
+      isd   = 1
+      imsh  = 1
+      nel   = nelfld(ifld)
+      if (icalled.eq.0)then
+        icalled=1
+        ifverb = .true.
+      endif
+
+      n = nx1*ny1*nz1*nel
+
+      call copy (ub,u,n)             ! ub = u on boundary
+      call dsavg(ub)                 ! Make certain ub is in H1
+                                     !     _
+      call axhelm (r,ub,h1,h2,1,1)   ! r = A*ub
+      
+      do i=1,n                       !        _
+         r(i)=-r(i)*mask(i)          ! r = -M*A*ub
+      enddo
+      
+      call dssum  (r,nx1,ny1,nz1)    ! dssum rhs
+      
+      call project1
+     $     (r,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+
+
+      if (ifverb) then
+        ifprint = .true.               ! Make Helmholtz
+        param(74) = 1                  ! verbose
+      else
+        ifprint = .false.
+        param(74) = 0
+      endif
+
+      tol = abs(tli)
+      p22=param(22)
+      tolb = restol(ifield)
+      restol(ifield) = abs(tol)
+      param(22)=abs(tol)
+      if (nio.eq.0) write(6,*) 'Calling hmhzpf ',name
+      if (nel.eq.nelv) then
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,binvm1)
+      else
+        call hmhzpf (name,u,r,h1,h2,mask,mult,imsh,tol,maxi,isd,bintm1)
+      endif
+      param(22)=p22
+      restol(ifield)=tolb
+      
+      call project2
+     $     (u,n,approx,napprox,h1,h2,mask,mult,ifwt,ifvec,name6)
+      
+      call add2(u,ub,n)
+      
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine chk_airfoil(s3,mask)
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      character*3 s3
+      integer i,n,lt
+      parameter(lt=lx1*ly1*lz1*lelt)
+      real mask(lt),terr, sgn, airfoil_geom, x, y,glamax
+
+      n = lx1*ly1*lz1*nelt
+
+      terr = 0.0
+      do i=1,n
+      if (mask(i).lt.0.5) then
+         x = xm1(i,1,1,1)
+         y = ym1(i,1,1,1)
+
+         sgn = 1.0
+         if (y.lt.0.0) sgn = -1.0
+         terr = max(terr, abs(y - airfoil_geom(x,sgn)))
+      endif
+      enddo
+      terr = glamax(terr,1)
+
+      if (nio.eq.0) write(*,*)'chk_airfoil ',s3,terr
+
+      return
+      end
+c-----------------------------------------------------------------------
+      real function airfoil_geom(x,sgn)
+c     ref: https://turbmodels.larc.nasa.gov/naca0012_val.html
+c     x in [0,1]
+      implicit none
+      real x, y, sgn
+    
+      y = 0.594689181 * ( 0.298222773*sqrt(x)
+     $                  - 0.127125232* x
+     $                  - 0.357907906*(x**2) 
+     $                  + 0.291984971*(x**3)
+     $                  - 0.105174606*(x**4) )
+      airfoil_geom = y * sgn
+
+      return
+      end
+c------------------------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine my_cbc_chk(s3)
+c     This print types of current BC, counting as well
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer ncbc,lcbc,i,j,e,f,inid,mtype,idummy,ncbc_tmp,ifld,nel
+     $      , nfldt
+      parameter (lcbc=10) ! max # unique CBC
+      integer cbc_count(lcbc),cbc_count_tmp(lcbc)
+      character*3 cbc_list(lcbc),cbc_list_tmp(lcbc),cbc3,s3,tag3
+      character*2 s2tmp
+      logical cbc_in_list
+
+      nfldt = nfield
+      if (ifmhd) nfldt = ifldmhd   ! mhd always uses nscal+3, with or without temperature
+
+      do ifld=0,nfldt
+
+        if (ifld.eq.0) then
+          tag3='PR '
+          nel = nelv
+        elseif (ifld.eq.1) then
+          tag3='VEL'
+          nel = nelv
+        elseif (ifmhd.AND.ifld.eq.ifldmhd) then
+          tag3='MHD'
+          nel = nelv
+        elseif (ifld.gt.1) then
+          write(s2tmp,'(I2.2)') ifld-2
+          tag3='S'//s2tmp
+          nel = nelt
+        endif
+
+        call izero(cbc_count,lcbc)
+
+        ncbc = 1                 ! # unique CBC
+        cbc_list(1) = 'E  ' ! internal BC
+
+        do e=1,nel
+        do f=1,2*ldim
+          cbc3 = cbc(f,e,ifld)
+          cbc_in_list = .false.
+
+          if (cbc3.eq.'E  '.or.cbc3.eq.'   ') then
+            cbc_count(1) = cbc_count(1) + 1
+            cbc_in_list = .true.
+          else
+            do i=2,ncbc ! go throught the registered CBC
+              if (cbc3.eq.cbc_list(i)) then
+                cbc_count(i) = cbc_count(i) + 1
+                cbc_in_list = .true.
+              endif
+            enddo
+          endif
+          if (.not.cbc_in_list) then
+            ncbc = ncbc + 1
+            if (ncbc.gt.lcbc)
+     $        call exitti('BCchk: Increase lcbc$',ncbc)
+
+            cbc_list(ncbc) = cbc3
+            cbc_count(ncbc) = 1
+          endif
+        enddo
+        enddo
+
+        call nekgsync()
+
+        ! All reduce to nid=0
+        if (nid.eq.0) then
+          do inid=1,np-1
+            mtype = inid
+            call csend(mtype,idummy,4,inid,0) ! handshake
+
+            call crecv(mtype,ncbc_tmp,4)
+            call crecv(mtype,cbc_list_tmp(1),3*ncbc_tmp,0,0)
+            call crecv(mtype,cbc_count_tmp(1),4*ncbc_tmp,0,0)
+
+            cbc_count(1) = cbc_count(1)+cbc_count_tmp(1)
+            do j=2,ncbc_tmp
+              cbc_in_list = .false.
+              do i=2,ncbc
+                if (cbc_list(i).eq.cbc_list_tmp(j)) then
+                  cbc_count(i) = cbc_count(i) + cbc_count_tmp(j)
+                  cbc_in_list = .true.
+                endif
+              enddo
+              if (.not.cbc_in_list) then
+                ncbc = ncbc + 1
+                if (ncbc.gt.lcbc)
+     $            call exitti('BCchk: Increase lcbc$',ncbc)
+
+                cbc_list(ncbc) = cbc_list_tmp(j)
+                cbc_count(ncbc) = cbc_count_tmp(j)
+              endif
+            enddo
+          enddo
+        else
+          mtype = nid
+          call crecv(mtype,idummy,4) ! ! handshake
+
+          call csend(mtype,ncbc,4,0,0)
+          call csend(mtype,cbc_list,3*ncbc,0,0)
+          call csend(mtype,cbc_count,4*ncbc,0,0)
+        endif
+
+        call nekgsync()
+
+        ! print
+        if (nid.eq.0) then
+          do i=1,ncbc
+            write(6,41) s3,ifld,tag3,cbc_list(i),cbc_count(i)
+          enddo
+        endif
+
+      enddo ! ifld
+
+   41 format(a3,' BC: 'i3,' ',a3,a5,i10)
+
+      return
+      end
+c-----------------------------------------------------------------------

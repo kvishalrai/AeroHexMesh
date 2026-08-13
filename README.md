@@ -39,9 +39,10 @@ own README for the details of that pipeline's stages.
 |---|---|
 | `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See its own [README](Construct2D/README.md) and [Credits](#credits). |
 | `Construct2D_to_SOD2D/` | 2D grid → smoothed high-order mesh for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](Construct2D_to_SOD2D/README.md). |
+| `Construct2D_to_NEKRS/` | 2D grid → smoothed, spanwise-periodic 3D mesh for [NekRS](https://github.com/Nek5000/nekRS). See its own [README](Construct2D_to_NEKRS/README.md). |
 
-Additional `Construct2D_to_<SOLVER>/` pipelines (e.g. Nek5000/NekRS) may be
-added following the same pattern.
+Additional `Construct2D_to_<SOLVER>/` pipelines may be added following the
+same pattern.
 
 ## Getting the code
 
@@ -107,9 +108,33 @@ authors:
 - The parametric arc-length wall-boundary placement in
   `MeshElasticitySolver.f90`'s `imposedDisplacement_elasticitySolverBufferSplineWall`
   was reverse-engineered from a working **[Nek5000](https://nek5000.mcs.anl.gov/)**
-  reference case (`smooth_geom0` in a `naca_set_e448.usr` case file,
-  Argonne National Laboratory / Nek5000 contributors) — an algorithmic
-  reference, not vendored code.
+  reference case (`smooth_geom0` in a `naca_set_e448.usr` case file, by
+  **Paul Fischer** (UIUC / Argonne National Laboratory)) — an algorithmic
+  reference, not vendored code at the time. That same case file is now
+  directly used (not just referenced, and further generalized to handle a
+  C-grid's open wall as well as the original O-grid) in the
+  `Construct2D_to_NEKRS/` pipeline's `linear_mesh/smooth_2D/` — see below.
+
+### `Construct2D_to_NEKRS/` pipeline
+
+- **[Nek5000](https://github.com/Nek5000/Nek5000)** and
+  **[NekRS](https://github.com/Nek5000/nekRS)** — Copyright © UChicago
+  Argonne, LLC, BSD-3-Clause-style license. Included as the
+  `Construct2D_to_NEKRS/CFD_code/{Nek5000,nekRS}` git submodules; their own
+  mesh tools (`gmsh2nek`, `genmap`, `re2torea`, `reatore2`, `n2to3`) drive
+  most of `linear_mesh/`'s pipeline.
+- **`linear_mesh/smooth_2D/naca_gen_spline_info.usr`**'s `smooth_geom0`/
+  `smooth_geom` — Paul Fischer's (UIUC / Argonne National Laboratory)
+  original wall-smoothing algorithm (see above), renamed from
+  `naca_set_e448.usr` and adapted to run against this repo's own meshes
+  (originally O-grid only; generalized to also handle a C-grid's wall as a
+  sub-range of the ring rather than the whole closed loop).
+- **[p3d2nek](https://github.com/yslan/p3d2nek)** (YuHsiang Lan, Argonne
+  National Laboratory) — a MATLAB-based Plot3D-to-Nek5000 mesh converter,
+  an alternative to this pipeline's own `p3d_to_gmsh_nek.py` + `gmsh2nek`
+  route. Explored as a possible route but not used in the pipeline
+  documented here (needs MATLAB); referenced for anyone wanting a
+  Gmsh-free path instead.
 
 ## Development
 
@@ -124,6 +149,8 @@ Vishal Kumar's direction and review.
 Code original to this repository is released under the MIT License (see
 [`LICENSE`](LICENSE)). Vendored components keep their own upstream licenses
 as noted above and in their respective directories: `Construct2D/` is
-GPLv3 (see `Construct2D/license/gpl.txt`), and the `sod2d_gitlab` submodule
-is MIT (see its own `LICENSE`). These are separate programs used as
-pipeline stages, not statically combined into one binary.
+GPLv3 (see `Construct2D/license/gpl.txt`), the `sod2d_gitlab` submodule is
+MIT (see its own `LICENSE`), and the `Nek5000`/`nekRS` submodules are
+BSD-3-Clause-style (Copyright © UChicago Argonne, LLC; see their own
+`LICENSE` files). These are separate programs used as pipeline stages, not
+statically combined into one binary.
