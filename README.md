@@ -29,6 +29,16 @@ own README for the details of that pipeline's stages.
 Additional `Construct2D_to_<SOLVER>/` pipelines may be added following the
 same pattern.
 
+## CFD Solvers
+
+This framework builds meshes for these spectral-element CFD codes:
+
+| Code | What it is | Docs |
+|---|---|---|
+| [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab) | GPU-native high-order CFD solver (BSC) | [Wiki](https://gitlab.com/bsc_sod2d/sod2d_gitlab/-/wikis/home) |
+| [Nek5000](https://github.com/Nek5000/Nek5000) | Spectral-element CFD solver and mesh tools (ANL) | [Docs](https://nek5000.github.io/NekDoc/) |
+| [NekRS](https://github.com/Nek5000/nekRS) | GPU-accelerated successor to Nek5000 (ANL/UIUC/PSU) | [Docs](https://nekrsdoc.readthedocs.io/en/latest/) |
+
 ## Getting the code
 
 ```bash
