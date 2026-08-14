@@ -76,13 +76,11 @@ specific to this step:
   then `n_corners-1` rows of `ax bx cx dx ay by cy dy` (segment `i`:
   corner `i` → corner `i+1`).
 - `wall_spline_correction_scale` — optional, default `1.0` (no damping).
-  Damps the per-call correction; not needed with the current parametric
-  placement (a leftover safety net from an earlier, search-based approach
-  that could need damping to avoid mesh collapse), but left
-  JSON-configurable.
+  Damps the per-call correction, in case a particular mesh/case needs a
+  more gradual push toward the spline to avoid mesh collapse.
 - `wall_spline_substeps` — optional, default `1` (single pass). Re-imposes
-  and re-solves from the already-updated coordinates each iteration; same
-  "not needed anymore, but available" status as the scale above.
+  and re-solves from the already-updated coordinates each iteration, for
+  cases that need more than one pass to fully converge onto the spline.
 - The wall's `bouCodes` id **must** map to `bc_type_non_slip_adiabatic_moving`,
   not plain `bc_type_non_slip_adiabatic` — the elasticity solver's
   Dirichlet-BC routine
@@ -109,5 +107,5 @@ segfault in Open MPI's `ompio` component reading a large mesh HDF5 file.
 - Quality (`minQ`/`maxQ`) is logged before and after the elasticity solve —
   it should stay essentially unchanged (the correction is sub-percent-of-chord).
 - Load the resulting mesh in ParaView and confirm the wall boundary nodes sit
-  on the smooth curve (most visible on a coarse/low-`porder` boundary where
-  the faceting was previously obvious).
+  on the smooth curve (most visible on a coarse/low-`porder` boundary, where
+  any remaining faceting would be easy to spot).

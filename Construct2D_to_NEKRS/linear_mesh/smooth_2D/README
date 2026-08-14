@@ -19,19 +19,16 @@ only:
 Nothing here modifies the 2D mesh itself, and nothing here is a real flow
 simulation -- this program computes the correction data and exits.
 
-The algorithm (smooth_geom0, in naca_gen_spline_info.usr) was originally
-written by Paul Fischer (UIUC / Argonne National Laboratory) for an O-grid
-mesh of his own, and renamed here from his original naca_set_e448.usr
-file name -- see the top-level README's Credits section for the full
-attribution. It's been adapted in two ways: to read meshes this repo's
-own pipeline produces (p3d_to_gmsh_nek.py + gmsh2nek + genmap, not his
-original toy mesh -- see ../README.md), and generalized so it also works
-on a C-grid, where the wall is only part of one ring of the mesh instead
-of the whole ring -- see "O-grid vs. C-grid, in this code" in
-../README.md, and the WALL_START_ELEMENT / WALL_ELEMENT_COUNT settings
-below. This directory is currently set up for a C-grid case
-(naca0012_sharp.p3d/.nmf); an O-grid mesh works too, with different
-settings (see below).
+The algorithm (smooth_geom0, in naca_gen_spline_info.usr) is by Paul
+Fischer (UIUC / Argonne National Laboratory) -- see the top-level
+README's Credits section for the full attribution. It reads meshes this
+repo's own pipeline produces (p3d_to_gmsh_nek.py + gmsh2nek + genmap --
+see ../README.md), and supports both O-grid and C-grid: on a C-grid, the
+wall is only part of one ring of the mesh, not the whole ring -- see
+"O-grid vs. C-grid, in this code" in ../README.md, and the
+WALL_START_ELEMENT / WALL_ELEMENT_COUNT settings below. This directory is
+currently set up for a C-grid case (naca0012_sharp.p3d/.nmf); an O-grid
+mesh works too, with different settings (see below).
 
 Running it
 ----------

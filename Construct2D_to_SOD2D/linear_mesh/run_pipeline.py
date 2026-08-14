@@ -30,13 +30,10 @@ from wall_spline import build_wall_spline_table
 
 # Environment setup for the external tools this pipeline shells out to
 # (Gmsh -- via python3's own "gmsh" package, MPI/HDF5 for partitioning).
-# Defaults to the exact modules BSC MareNostrum 5's own `module getdefault
-# sod2d` alias resolves to as of 2026-08 (confirmed by running it and
-# diffing `module list` before/after) -- spelled out here instead of using
-# that alias directly so it's clear exactly what gets loaded, rather than
-# hiding it behind a cluster-specific name only BSC's module system knows
-# about. On any OTHER system, this default is meaningless -- set
-# AEROHEXMESH_MODULE_SETUP yourself instead of editing this file:
+# Defaults to the modules that give a working Gmsh + MPI + HDF5 + python3
+# environment on BSC MareNostrum 5. On any OTHER system, this default is
+# meaningless -- set AEROHEXMESH_MODULE_SETUP yourself instead of editing
+# this file:
 #
 #   export AEROHEXMESH_MODULE_SETUP="module load gmsh openmpi hdf5 python3"
 #

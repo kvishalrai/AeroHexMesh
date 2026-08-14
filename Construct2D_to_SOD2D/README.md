@@ -75,11 +75,9 @@ partition, and smooth the mesh*, then *run it*.
 itself — an external codebase this pipeline depends on but doesn't own,
 included as a git submodule (see the top-level README's
 [Credits](../README.md#credits)). It's currently pinned to the
-`277-witness-points-using-wrong-connectivity` branch, which carries a fix
-for high-order wall boundary smoothing (the parametric arc-length
-placement described above, replacing an earlier nearest-point-search
-approach that could collide near regions of high curvature, like the
-leading edge). Both stages above depend on tools/binaries built from it:
+`277-witness-points-using-wrong-connectivity` branch, which carries the
+parametric arc-length wall-smoothing placement described above. Both
+stages above depend on tools/binaries built from it:
 
 | Binary | Used by | Build notes |
 |---|---|---|

@@ -112,11 +112,9 @@ module purge && module load bsc/1.0 nvidia-hpc-sdk/24.3 \
 
 and `AEROHEXMESH_PYTHON_MODULE_SETUP` to `module unload python\nmodule
 load anaconda` (that default python module doesn't have `numpy`/`h5py`,
-so the two steps that need them swap in Anaconda's instead). These
-defaults are spelled out explicitly in `run_pipeline.py` itself — they
-used to be a single opaque alias (`module getdefault sod2d`), which
-worked but hid exactly what it was loading; now the actual module list is
-visible in the script (and here) instead.
+so the two steps that need them swap in Anaconda's instead). Both
+defaults are spelled out explicitly in `run_pipeline.py` itself, so the
+exact module list is visible right there.
 
 ## Usage
 
@@ -191,11 +189,9 @@ picture; here's the implementation detail:
   boundary face or Gmsh-side periodic surface is needed for it.
 - **C-grid**: the wake-cut fold (the two i-sub-ranges the `.nmf` marks
   `ONE_TO_ONE` on the wall face) is merged the same way — by node-id
-  aliasing, not a Gmsh `Periodic Surface`. An earlier attempt to expose it
-  as two separate boundary surfaces and relate them with a Gmsh periodic
-  directive turned out to be unreliable (see git history if curious); the
-  node-alias approach mirrors the O-grid closure and has been verified
-  end-to-end through Gmsh, `gmsh2sod2d.py`, and `tool_meshConversorPar`.
+  aliasing, not a Gmsh `Periodic Surface`. This mirrors the O-grid closure
+  above, and is verified end-to-end through Gmsh, `gmsh2sod2d.py`, and
+  `tool_meshConversorPar`.
 
 ## Directory layout
 
