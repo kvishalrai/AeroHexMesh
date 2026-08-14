@@ -137,3 +137,7 @@ MIT (see its own `LICENSE`), and the `Nek5000`/`nekRS` submodules are
 BSD-3-Clause-style (Copyright © UChicago Argonne, LLC; see their own
 `LICENSE` files). These are separate programs used as pipeline stages, not
 statically combined into one binary.
+
+## Contact
+
+Vishal Kumar — kumar14.rai@gmail.com — [LinkedIn](https://www.linkedin.com/in/vishal-kumar-69a32b4a/)
