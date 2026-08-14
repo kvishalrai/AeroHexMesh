@@ -1,6 +1,6 @@
 # AeroHexMesh
 
-*Aerodynamics with Hexahedral Meshes*
+*Computational Aerodynamics with Hexahedral Meshes*
 
 A framework for generating high-order, spanwise-extruded 3D meshes (O-grid or
 C-grid) for spectral-element CFD solvers, starting from a 2D
