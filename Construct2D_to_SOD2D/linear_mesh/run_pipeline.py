@@ -29,11 +29,26 @@ from p3d_to_gmsh import p3d2gmsh
 from wall_spline import build_wall_spline_table
 
 # Environment setup for the external tools this pipeline shells out to
-# (Gmsh, python3, MPI/HDF5 for partitioning). Defaults to BSC MareNostrum 5's
-# module system (`module getdefault sod2d` is an MN5-specific alias, not a
-# real environment/cluster elsewhere) -- override via these env vars on any
-# other system rather than editing the run_bash() calls below.
-MODULE_SETUP = os.environ.get("AEROHEXMESH_MODULE_SETUP", "module getdefault sod2d")
+# (Gmsh -- via python3's own "gmsh" package, MPI/HDF5 for partitioning).
+# Defaults to the exact modules BSC MareNostrum 5's own `module getdefault
+# sod2d` alias resolves to as of 2026-08 (confirmed by running it and
+# diffing `module list` before/after) -- spelled out here instead of using
+# that alias directly so it's clear exactly what gets loaded, rather than
+# hiding it behind a cluster-specific name only BSC's module system knows
+# about. On any OTHER system, this default is meaningless -- set
+# AEROHEXMESH_MODULE_SETUP yourself instead of editing this file:
+#
+#   export AEROHEXMESH_MODULE_SETUP="module load gmsh openmpi hdf5 python3"
+#
+# (whatever module names/commands actually load a working Gmsh + MPI +
+# HDF5 + python3 on your system). Set it to "" for a no-op if you've
+# already activated everything yourself (e.g. a virtualenv) before
+# running this script.
+MODULE_SETUP = os.environ.get(
+    "AEROHEXMESH_MODULE_SETUP",
+    "module purge && module load bsc/1.0 nvidia-hpc-sdk/24.3 "
+    "hdf5/1.14.1-2-nvidia-nvhpcx mkl/2025.2 python/3.12.1-gcc cmake/3.30.5",
+)
 # Extra setup needed only for steps that run a python3 script requiring
 # numpy/h5py (gmsh2sod2d.py, the partitioner's input.json driver): on MN5,
 # the base module set's own python3 lacks those, so swap in anaconda.

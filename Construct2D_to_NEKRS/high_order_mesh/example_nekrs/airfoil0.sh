@@ -49,11 +49,16 @@
 
 ### Load a working compiler/MPI/GPU software environment. You'd expect a
 ### module set named after NekRS itself, but that one doesn't provide a
-### working environment on this cluster -- the SOD2D pipeline's module
-### set happens to include everything NekRS also needs (compiler, MPI,
-### CUDA), so it's reused here instead of maintaining a separate one:
+### working environment on this cluster. What DOES work is the same
+### module set the SOD2D pipeline uses (compiler, MPI, CUDA -- everything
+### NekRS also needs) -- normally loaded via a shorthand alias,
+### `module getdefault sod2d`, spelled out explicitly here instead so
+### it's clear exactly what's being loaded rather than hiding it behind
+### a cluster-specific alias name:
 #module getdefault nekrs
-module getdefault sod2d
+module purge
+module load bsc/1.0 nvidia-hpc-sdk/24.3 hdf5/1.14.1-2-nvidia-nvhpcx \
+    mkl/2025.2 python/3.12.1-gcc cmake/3.30.5
 
 ### Point at the NekRS install to use, and load its own helper functions
 export NEKRS_HOME=$HOME/.local/nekrs_v24_wf

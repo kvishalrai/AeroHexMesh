@@ -77,12 +77,16 @@ callable as a Python library, which SOD2D's are and Nek5000's aren't).
 
 ### Cluster-specific module/environment setup
 
-`run_pipeline.py` shells out to Gmsh, `python3`, and MPI for its Gmsh,
-`gmsh2sod2d.py`, and partitioning steps, and needs each to be on `PATH`
-when it runs. The defaults (`AEROHEXMESH_MODULE_SETUP` /
-`AEROHEXMESH_PYTHON_MODULE_SETUP`, both env vars) are BSC MareNostrum 5
-specific (`module getdefault sod2d` is an MN5-only alias) — **override
-them on any other system** rather than editing `run_pipeline.py`:
+`run_pipeline.py` shells out to Gmsh (via python3's own `gmsh` package),
+and to MPI/HDF5 for the partitioning step — all of that needs to already
+be on `PATH` when those commands run. Rather than hardcoding a real
+`module load` line with no way to change it, `run_pipeline.py` runs
+whatever shell command is in the `AEROHEXMESH_MODULE_SETUP` environment
+variable right before each such step, and `AEROHEXMESH_PYTHON_MODULE_SETUP`
+right after it (only needed for the two steps that run a python3 script
+requiring `numpy`/`h5py`: `gmsh2sod2d.py` and the partitioner's own
+driver). **Set both yourself** if you're not on BSC MareNostrum 5 — don't
+edit `run_pipeline.py`:
 
 ```bash
 export AEROHEXMESH_MODULE_SETUP="module load gmsh openmpi hdf5 python3"
@@ -92,9 +96,27 @@ export AEROHEXMESH_PYTHON_MODULE_SETUP=""   # only needed if your base
 python3 run_pipeline.py --work-dir ... --config ... --airfoil-file ...
 ```
 
-Leave both unset to keep the MN5 defaults, or set either to `""` for a
-no-op (e.g. if you've already activated everything yourself, such as via
-a virtualenv, before running the pipeline).
+(the exact module names above are just an example — use whatever your
+own system calls them). Set either to `""` for a no-op, e.g. if you've
+already activated everything yourself (a virtualenv, `conda activate`,
+...) before running the pipeline.
+
+**On BSC MareNostrum 5**, you don't need to set either — `run_pipeline.py`
+already defaults `AEROHEXMESH_MODULE_SETUP` to the exact modules that
+give a working Gmsh + MPI + HDF5 environment:
+
+```bash
+module purge && module load bsc/1.0 nvidia-hpc-sdk/24.3 \
+    hdf5/1.14.1-2-nvidia-nvhpcx mkl/2025.2 python/3.12.1-gcc cmake/3.30.5
+```
+
+and `AEROHEXMESH_PYTHON_MODULE_SETUP` to `module unload python\nmodule
+load anaconda` (that default python module doesn't have `numpy`/`h5py`,
+so the two steps that need them swap in Anaconda's instead). These
+defaults are spelled out explicitly in `run_pipeline.py` itself — they
+used to be a single opaque alias (`module getdefault sod2d`), which
+worked but hid exactly what it was loading; now the actual module list is
+visible in the script (and here) instead.
 
 ## Usage
 
