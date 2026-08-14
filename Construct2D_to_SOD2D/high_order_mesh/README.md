@@ -1,23 +1,41 @@
-# Wall boundary smoothing
+# Step 4: wall boundary smoothing
 
-`p3d_to_gmsh.py` + `gmsh2sod2d.py` place extra (non-vertex) high-order boundary
-nodes on the wall by straight-line/GLL interpolation between the linear
-Construct2D corner points — the curved wall boundary is faceted at high
-order, not truly analytic. This step uses SOD2D's `MeshElasticitySolver` to
-snap every wall node exactly onto a cubic spline fit through the wall's own
-corner points, and elastically relax the interior mesh to match.
+This is the last step of the pipeline described in
+[`../linear_mesh/README.md`](../linear_mesh/README.md#the-algorithm).
+The mesh coming out of step 3 has the right shape, boundary tags, and
+partitioning — but its wall is still the jagged, faceted approximation of
+the true airfoil curve. This step fixes exactly that.
+
+## What this step actually does
+
+`p3d_to_gmsh.py` + `gmsh2sod2d.py` (steps 1–3) place a high-order mesh's
+*extra* boundary nodes (the ones beyond the coarse corner points) by
+simple straight-line interpolation — so a smoothly curved wall ends up
+looking like a series of short flat facets, especially visible with a
+coarse mesh or near sharp curvature like the leading edge.
+
+This step uses SOD2D's own `MeshElasticitySolver` to:
+
+1. Fit a smooth curve (a cubic spline) through the wall's own corner
+   points — the same coarse points Construct2D produced.
+2. Snap every high-order wall node exactly onto that curve.
+3. Elastically relax the rest of the mesh to match, so moving the wall
+   nodes doesn't tangle or collapse the interior elements — think of the
+   mesh as a stretchy material that gets gently reshaped around the
+   corrected wall, rather than the wall nodes being moved in isolation.
 
 Implementation lives in
 `../CFD_code/sod2d_gitlab/src/lib_mainBaseClass/sources/MeshElasticitySolver.f90`,
 in `imposedDisplacement_elasticitySolverBufferSplineWall` — this is the
-**default** `initialBuffer` binding, so no rebinding/rebuilding step is
-needed to activate it.
+**default** binding, so no rebuilding SOD2D is needed to use it.
 
-Placement is **parametric (arc-length)**, not a nearest-point search: each
-high-order boundary node's target position is computed directly from its own
-GLL reference coordinate and the wall spline's matched corner arc-lengths, so
-the many-to-one node collisions a search-based approach can hit near high
-curvature (e.g. the leading edge) can't occur by construction.
+Node placement on the curve is **parametric (arc-length)**, not a
+nearest-point search: each high-order boundary node's target position is
+computed directly from its own reference coordinate and the wall spline's
+matched corner arc-lengths. This matters because a naive "find the
+nearest point on the curve" approach can send two different mesh nodes to
+the *same* point on the curve near high curvature (like the leading
+edge) — the arc-length approach can't do that, by construction.
 
 ## Where the input files come from
 
@@ -75,15 +93,14 @@ specific to this step:
 
 ## Running it
 
-`sbatch airfoil0.sh` from this folder (MN5, GPU partition — see the script
-for module/queue setup). At `num_partitions>=3` on a large mesh, two
-unrelated MPI crashes have been seen and are worked around directly in
-`airfoil0.sh` — see its comments and the `project_ucx_partitioning_fix.md`
-memory for the full diagnosis: a UCX rendezvous-protocol segfault in
-halo-exchange (`UCX_TLS=...`), and a separate segfault in Open MPI's
-`ompio` component reading a large mesh HDF5 file (`--mca io ^ompio`).
+`sbatch airfoil0.sh` from this folder (MN5, GPU partition — see the
+script for module/queue setup). At `num_partitions>=3` on a large mesh,
+two unrelated MPI crashes have been seen and are worked around directly
+in `airfoil0.sh` (see its comments for the full explanation of each):
+a UCX rendezvous-protocol segfault in halo-exchange, and a separate
+segfault in Open MPI's `ompio` component reading a large mesh HDF5 file.
 
-## Verifying the result
+## How to tell if it worked
 
 - The run prints a **max corner-match error** each time it runs; if a wall
   boundary corner doesn't coincide with any point in the spline table within
