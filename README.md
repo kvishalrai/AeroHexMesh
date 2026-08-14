@@ -107,13 +107,9 @@ authors:
   [`Construct2D_to_SOD2D/README.md`](Construct2D_to_SOD2D/README.md#prerequisites).
 - The parametric arc-length wall-boundary placement in
   `MeshElasticitySolver.f90`'s `imposedDisplacement_elasticitySolverBufferSplineWall`
-  was reverse-engineered from a working **[Nek5000](https://nek5000.mcs.anl.gov/)**
-  reference case (`smooth_geom0` in a `naca_set_e448.usr` case file, by
-  **Paul Fischer** (UIUC / Argonne National Laboratory)) — an algorithmic
-  reference, not vendored code at the time. That same case file is now
-  directly used (not just referenced, and further generalized to handle a
-  C-grid's open wall as well as the original O-grid) in the
-  `Construct2D_to_NEKRS/` pipeline's `linear_mesh/smooth_2D/` — see below.
+  is based on the `smooth_geom0` algorithm by **Paul Fischer** (UIUC /
+  Argonne National Laboratory) — the same algorithm used directly in the
+  `Construct2D_to_NEKRS/` pipeline's `linear_mesh/smooth_2D/`, see below.
 
 ### `Construct2D_to_NEKRS/` pipeline
 
@@ -125,24 +121,11 @@ authors:
   most of `linear_mesh/`'s pipeline.
 - **`linear_mesh/smooth_2D/naca_gen_spline_info.usr`**'s `smooth_geom0`/
   `smooth_geom` — Paul Fischer's (UIUC / Argonne National Laboratory)
-  original wall-smoothing algorithm (see above), renamed from
-  `naca_set_e448.usr` and adapted to run against this repo's own meshes
-  (originally O-grid only; generalized to also handle a C-grid's wall as a
-  sub-range of the ring rather than the whole closed loop).
+  wall-smoothing algorithm (see above), adapted to run against this
+  repo's own meshes and to support both O-grid and C-grid.
 - **[p3d2nek](https://github.com/yslan/p3d2nek)** (YuHsiang Lan, Argonne
-  National Laboratory) — a MATLAB-based Plot3D-to-Nek5000 mesh converter,
-  and this pipeline's original intended route to a Nek5000 mesh. Replaced
-  here by the Python/Gmsh-based `p3d_to_gmsh_nek.py` + `gmsh2nek` route
-  (no MATLAB dependency), but referenced for anyone wanting that path
-  instead.
-
-## Development
-
-Substantial parts of this repository — the mesh-generation pipeline scripts,
-the wall-boundary elasticity fix in `MeshElasticitySolver.f90`, and this
-documentation — were developed with assistance from
-[Claude Code](https://claude.com/claude-code) (Anthropic), working under
-Vishal Kumar's direction and review.
+  National Laboratory) — a MATLAB-based alternative to this pipeline's
+  Python/Gmsh-based `p3d_to_gmsh_nek.py` + `gmsh2nek` route.
 
 ## License
 
