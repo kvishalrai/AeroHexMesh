@@ -33,11 +33,11 @@ same pattern.
 
 This framework builds meshes for these spectral-element CFD codes:
 
-| Code | What it is | Docs |
-|---|---|---|
-| [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab) | GPU-native high-order CFD solver (BSC) | [Wiki](https://gitlab.com/bsc_sod2d/sod2d_gitlab/-/wikis/home) |
-| [Nek5000](https://github.com/Nek5000/Nek5000) | Spectral-element CFD solver and mesh tools (ANL) | [Docs](https://nek5000.github.io/NekDoc/) |
-| [NekRS](https://github.com/Nek5000/nekRS) | GPU-accelerated successor to Nek5000 (ANL/UIUC/PSU) | [Docs](https://nekrsdoc.readthedocs.io/en/latest/) |
+| Code | What it is | Docs | Paper |
+|---|---|---|---|
+| [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab) | Incompressible & compressible (high-Mach); GPU-accelerated (BSC) | [Wiki](https://gitlab.com/bsc_sod2d/sod2d_gitlab/-/wikis/home) | [Gasparino et al. 2024](https://doi.org/10.1016/j.cpc.2023.109067) |
+| [Nek5000](https://github.com/Nek5000/Nek5000) | Incompressible & low-Mach; CPU-based (ANL) | [Docs](https://nek5000.github.io/NekDoc/) | [Fischer 1997](https://doi.org/10.1006/jcph.1997.5651) |
+| [NekRS](https://github.com/Nek5000/nekRS) | Incompressible & low-Mach; GPU-oriented successor to Nek5000 (ANL/UIUC/PSU) | [Docs](https://nekrsdoc.readthedocs.io/en/latest/) | [Fischer et al. 2021](https://arxiv.org/abs/2104.05829) |
 
 ## Getting the code
 
