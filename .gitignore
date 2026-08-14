@@ -58,6 +58,12 @@ wall_coords_*.dat
 /Construct2D_to_NEKRS/high_order_mesh/*/.cache/
 /Construct2D_to_NEKRS/high_order_mesh/*/SESSION.NAME
 
+# pyHyp/: no generated volume meshes or downloaded surface meshes are
+# tracked -- regenerate via pyHyp/README.md.
+/pyHyp/example_*/volumeMesh.*
+/pyHyp/example_*/logMeshGeneration.txt
+/pyHyp/example_*/*.cgns.tar.gz
+
 # Vendored/compiled binaries (rebuild from source)
 /Construct2D/construct2d
 /Construct2D/bin/x86_64/Linux/construct2d

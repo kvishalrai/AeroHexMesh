@@ -25,6 +25,7 @@ own README for the details of that pipeline's stages.
 | `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See its own [README](Construct2D/README.md) and [Credits](#credits). |
 | `Construct2D_to_SOD2D/` | 2D grid → smoothed high-order mesh for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](Construct2D_to_SOD2D/README.md). |
 | `Construct2D_to_NEKRS/` | 2D grid → smoothed, spanwise-periodic 3D mesh for [NekRS](https://github.com/Nek5000/nekRS). See its own [README](Construct2D_to_NEKRS/README.md). |
+| `pyHyp/` | 3D surface mesh → volume mesh by hyperbolic extrusion, for real (tapered/swept) 3D shapes rather than a spanwise-extruded 2D section. See its own [README](pyHyp/README.md). |
 
 Additional `Construct2D_to_<SOLVER>/` pipelines may be added following the
 same pattern.

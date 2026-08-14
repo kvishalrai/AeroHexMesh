@@ -1,0 +1,18 @@
+#!/bin/bash
+# SLURM submission wrapper for generate_mesh.sh -- the login node kills any
+# process past 300s of CPU time, and the M6 extrusion needs much longer than
+# that, so this has to run on a compute node instead of directly in a login
+# shell. See ../../Construct2D_to_SOD2D/high_order_mesh/airfoil0.sh for the
+# same pattern used elsewhere in this repo.
+#SBATCH --job-name=pyhyp_m6
+#SBATCH -D .
+#SBATCH --output=out.o
+#SBATCH --error=error.e
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --qos=gp_debug
+#SBATCH --time=00:20:00
+#SBATCH --account=bsc21
+
+./generate_mesh.sh

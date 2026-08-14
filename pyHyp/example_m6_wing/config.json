@@ -1,0 +1,24 @@
+{
+   "unattachedEdgesAreSymmetry": true,
+   "outerFaceBC": "farfield",
+   "autoConnect": true,
+   "BC": {},
+   "families": "wall",
+
+   "N": 81,
+   "s0": 1.5e-5,
+   "marchDist": 30.0,
+   "nConstantStart": 1,
+
+   "ps0": -1.0,
+   "pGridRatio": -1.0,
+   "cMax": 5.0,
+
+   "epsE": 1.0,
+   "epsI": 2.0,
+   "theta": 3.0,
+   "volCoef": 0.25,
+   "volBlend": 0.0005,
+   "volSmoothIter": 100,
+   "kspRelTol": 1e-4
+}
