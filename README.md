@@ -140,7 +140,8 @@ authors:
   simulations of wall turbulence," under review, *Journal of Fluid
   Mechanics*. https://arxiv.org/abs/2605.01015
 - Contributions from several BSC and ANL personnel are acknowledged:
-  YuHsiang Lan (ANL), Bedri Yagez (BSC), Jose Maria (BSC).
+  Yu-Hsiang Lan (ANL) -- see his GitHub, https://github.com/yslan/, for
+  many Nek5000/NekRS-related tools -- Bedri Yagez (BSC), Jose Maria (BSC).
 - V. Kumar acknowledges his AI4S fellowship within the Generación D
   initiative by Red.es, Ministerio para la Transformación Digital y de la
   Función Pública, for talent attraction (C005/24-ED CV1), funded by
