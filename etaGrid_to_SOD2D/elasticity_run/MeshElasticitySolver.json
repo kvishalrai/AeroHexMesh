@@ -1,0 +1,33 @@
+{
+   "type":"MeshElasticitySolver",
+
+   "mesh_h5_file_path":"",
+   "mesh_h5_file_name":"etagrid_demo_hi",
+
+   "results_h5_file_path":"",
+   "results_h5_file_name":"results",
+
+   "mesh_h5_file_newpath":"",
+   "mesh_h5_file_newname":"etagrid_demo_hi_new",
+
+   "saveNewCoords":true,
+
+   "saveInitialField":false,
+
+   "saveSurfaceResults":false,
+
+   "maxIter_elasticity":10000,
+   "tol_elasticity":1e-5,
+   "E":10.0,
+   "nu":0.4,
+   "elasticity_problemType":"elasticity_fromALE",
+
+   "bouCodes":
+   [
+      {"id":1, "bc_type":"bc_type_non_slip_adiabatic_moving"},
+      {"id":2, "bc_type":"bc_type_far_field"},
+      {"id":3, "bc_type":"bc_type_outlet_incomp"}
+   ],
+
+   "wall_spline_table_file": "naca0012_demo_wall_spline.dat"
+}

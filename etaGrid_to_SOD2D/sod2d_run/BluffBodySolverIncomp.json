@@ -1,0 +1,56 @@
+{
+   "type":"BluffBodySolverIncomp",
+
+   "mesh_h5_file_path":"",
+   "mesh_h5_file_name":"etagrid_demo_hi_wavy",
+
+   "results_h5_file_path":"",
+   "results_h5_file_name":"results",
+
+   "final_istep":2000,
+
+   "save_logFile_first":1,
+   "save_logFile_step":10,
+
+   "save_resultsFile_first":1,
+   "save_resultsFile_step":500,
+
+   "save_restartFile_first":1,
+   "save_restartFile_step":500,
+
+   "loadRestartFile":false,
+   "restartFile_to_load":1,
+
+   "continue_oldLogs":false,
+
+   "saveAvgFile":false,
+   "loadAvgFile":false,
+
+   "saveSurfaceResults":true,
+
+   "flag_type_les":"les_type_vreman",
+
+   "maxIter":20,
+   "tol":1e-3,
+
+   "cfl_conv":0.95,
+
+   "v0":1.0,
+   "delta":1.0,
+   "rho0":1.0,
+   "Re":1000.0,
+   "aoa":0.0,
+
+   "have_witness":false,
+
+   "bouCodes":
+   [
+      {"id":1, "bc_type":"bc_type_non_slip_adiabatic"},
+      {"id":2, "bc_type":"bc_type_far_field"},
+      {"id":3, "bc_type":"bc_type_outlet_incomp"}
+   ],
+
+   "buffer":
+   [
+   ]
+}

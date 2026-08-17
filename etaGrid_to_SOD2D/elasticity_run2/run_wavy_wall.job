@@ -1,0 +1,27 @@
+#!/bin/bash
+# Second-pass wavy-wall perturbation for the etaGrid demo mesh: reads
+# elasticity_run/'s already spline-smoothed output, adds a spanwise-
+# sinusoidal, TE-tapered normal displacement on the wall, and relaxes
+# the interior to match (new Fortran wavy-wall code path in
+# MeshElasticitySolver.f90, dispatched via wavy_wall_amplitude_fraction).
+#SBATCH --job-name=sod2d_etagrid_wavywall
+#SBATCH -D .
+#SBATCH --output=out.o
+#SBATCH --error=error.e
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=20
+#SBATCH --gres=gpu:4
+#SBATCH --qos=acc_debug
+#SBATCH --time=00:20:00
+#SBATCH --account=bsc21
+
+module purge
+module load nvidia-hpc-sdk/24.3 hdf5/1.14.1-2-nvidia-nvhpcx
+
+SOD2D_SRC_DIR=../../Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/build_p2/src/app_sod2d/
+
+export UCX_TLS=rc,cuda_copy,cuda_ipc,sm,self
+
+mpirun -np 4 --mca io ^ompio --map-by ppr:4:node:PE=20 --report-bindings ./mn5_bind.sh $SOD2D_SRC_DIR/sod2d MeshElasticitySolver
