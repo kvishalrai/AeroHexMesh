@@ -71,6 +71,17 @@ YZ cross-section   ──►  sweep over airfoil (Y)  ──►  extend into wak
                                               elasticity_run/         elasticity_run2/          sod2d_run/
 ```
 
+## Example input
+
+`examples/airfoil.msh` + `examples/naca0012_sharp.dat` is the original YZ
+cross-section + airfoil curve this framework was built against (as opposed
+to `make_demo_cross_section.py`'s clean, synthetic transfinite grid).
+**Known issue, not yet fixed:** `airfoil.msh` has ~40 degenerate
+(near-zero-area) quads from the quad-subdivision step that removed its
+original stray triangles — traced but not yet repaired (see
+`make_demo_cross_section.py`'s own docstring for how this was diagnosed).
+To be replaced with a repaired version.
+
 ## Prerequisites
 
 - Python 3 with `numpy`, `scipy` (`CubicSpline`), and the `gmsh` Python
