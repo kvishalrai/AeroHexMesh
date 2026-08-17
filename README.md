@@ -133,6 +133,12 @@ authors:
   and M. Min, "Delayed detached-eddy simulations of NACA wing sections using
   spectral elements," *Journal of Turbulence*, vol. 26, 2025.
   https://doi.org/10.1080/14685248.2025.2608679
+- `etaGrid_to_SOD2D/`'s underlying concept (an unstructured cross-section
+  swept with wall-normal/spanwise grid sizes proportional to the local
+  Kolmogorov scale η) comes from: A. Rouhi, V. Kumar, W. Wu, M. Kozul, and
+  O. Lehmkuhl, "Leveraging unstructured grids for direct numerical
+  simulations of wall turbulence," under review, *Journal of Fluid
+  Mechanics*. https://arxiv.org/abs/2605.01015
 - Contributions from several BSC and ANL personnel are acknowledged:
   YuHsiang Lan (ANL), Bedri Yagez (BSC), Jose Maria (BSC).
 - V. Kumar acknowledges his AI4S fellowship within the Generación D

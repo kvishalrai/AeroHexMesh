@@ -5,6 +5,14 @@ This page is the deep-dive companion to
 covers *what* the pipeline does and *how to run it*. Here we derive the
 actual math behind every stage and walk through where it lives in code.
 
+The underlying η-grid concept (wall-normal/spanwise grid sizes proportional
+to the local Kolmogorov scale η) is from Rouhi, Kumar, Wu, Kozul &
+Lehmkuhl, "Leveraging unstructured grids for direct numerical simulations
+of wall turbulence," under review, *Journal of Fluid Mechanics*
+(<https://arxiv.org/abs/2605.01015>) -- this page covers this repo's own
+mesh-generation and SOD2D-import math built around that concept, not the
+paper's own turbulence-statistics results.
+
 ## 1. Cross-section representation
 
 A cross-section is a set of 2D points `yz` (shape `(N, 2)`, columns

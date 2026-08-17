@@ -9,6 +9,14 @@ wall-normal + spanwise resolution come from any YZ grid you can build —
 not just a uniform spanwise translation — while still reusing SOD2D's own
 wall-spline smoothing mechanism for the airfoil surface.
 
+The underlying η-grid concept -- a cross-section with wall-normal (Y) and
+spanwise (Z) grid sizes proportional to the local Kolmogorov scale η, thin
+viscous-scaled near the wall and coarsening above it -- comes from Rouhi,
+Kumar, Wu, Kozul & Lehmkuhl, "Leveraging unstructured grids for direct
+numerical simulations of wall turbulence," under review, *Journal of Fluid
+Mechanics* (<https://arxiv.org/abs/2605.01015>); this pipeline builds the
+3D swept/wake mesh and SOD2D import around that concept.
+
 ## The big picture
 
 1. **Start from a YZ cross-section.** A quad mesh in the (Y, Z) plane:

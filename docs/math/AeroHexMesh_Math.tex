@@ -377,6 +377,14 @@ at \(s=1\)/\(t=1\)), and the Newton solve resumes in the new cell.
 \section{\texttt{etaGrid\_to\_SOD2D/}}
 \label{sec:etagrid}
 See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/etaGrid_to_SOD2D/README.md}{\texttt{docs/etaGrid\_to\_SOD2D/README.md}}.
+The underlying \(\eta\)-grid concept -- wall-normal/spanwise grid sizes
+proportional to the local Kolmogorov scale \(\eta\) -- is from Rouhi,
+Kumar, Wu, Kozul \& Lehmkuhl, ``Leveraging unstructured grids for direct
+numerical simulations of wall turbulence,'' under review, \emph{Journal
+of Fluid Mechanics}
+(\href{https://arxiv.org/abs/2605.01015}{arXiv:2605.01015}); what
+follows is this repository's own mesh-generation and SOD2D-import math
+built around that concept.
 
 \subsection{Airfoil curve: fit and differential geometry}
 Arc-length parametrization as in Section~\ref{sec:wall-spline}; a full cubic
