@@ -16,7 +16,8 @@ curve .p3d/.nmf          wall boundary for the target solver
 
 Each `Construct2D_to_<SOLVER>/` directory is a self-contained pipeline from
 the shared 2D Construct2D grid to a smoothed, solver-ready 3D mesh — see its
-own README for the details of that pipeline's stages.
+own README for the details of that pipeline's stages. For the math behind
+every algorithm and how it's implemented, see [`docs/`](docs/README.md).
 
 ## Repository layout
 

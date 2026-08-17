@@ -1,0 +1,527 @@
+\documentclass[11pt]{article}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue, bookmarksopen=true}
+
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\pd}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\vecb}[1]{\bm{#1}}
+
+\title{AeroHexMesh: Mathematical Formulations\\[0.3em]
+\large A companion to \texttt{docs/} -- every algorithm's math, in one document}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section*{Scope}
+\addcontentsline{toc}{section}{Scope}
+
+This document collects, in standard mathematical notation, every
+algorithm documented (in prose + pseudocode) across \texttt{docs/}. It
+is organized identically to that tree: one section per pipeline
+directory, in the same order. Each section cross-references the
+corresponding Markdown page, which additionally covers \emph{where}
+each piece of math lives in code and \emph{why} each design decision
+was made -- this document is the math alone, typeset properly.
+
+Notation used throughout: bold lowercase (\(\vecb{p}\), \(\vecb{n}\))
+for 2D or 3D vectors/points; \(s\) for an arc-length parameter;
+subscripts for grid/element indices; primes or \(\partial\) for
+derivatives as is conventional per context.
+
+%=====================================================================
+\section{\texttt{Construct2D/}}
+\label{sec:construct2d}
+Construct2D's own grid-generation PDE (elliptic or hyperbolic,
+selected by the \texttt{slvr} namelist field) is vendored upstream
+Fortran and out of scope here -- see
+\texttt{Construct2D/doc/user\_manual.pdf}. No original math from this
+repository's own code is introduced in this directory; see
+\href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/Construct2D/README.md}{\texttt{docs/Construct2D/README.md}}
+for the batch-driving mechanism.
+
+%=====================================================================
+\section{\texttt{Construct2D\_to\_SOD2D/linear\_mesh/}}
+\label{sec:c2s-linear}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/Construct2D_to_SOD2D/linear_mesh.md}{\texttt{docs/Construct2D\_to\_SOD2D/linear\_mesh.md}}.
+
+\subsection{Spanwise extrusion}
+Given a 2D structured grid \((x_{ij}, y_{ij})\), \(i \in [0,\text{idim}), j\in[0,\text{jdim})\),
+and spanwise stations \(z_k = k \cdot \Delta z\), \(k \in [0, \text{nplanes})\),
+extrusion is pure translation:
+\begin{equation}
+X_{ijk} = x_{ij}, \qquad Y_{ijk} = y_{ij}, \qquad Z_{ijk} = z_k .
+\end{equation}
+No offset or curvature is introduced -- contrast with
+Section~\ref{sec:etagrid-sweep}'s curved sweep.
+
+\subsection{Structured node numbering}
+\label{sec:c2s-numbering}
+For block \(n\) with per-block node count \(N_n = \text{idim}_n \cdot \text{jdim}_n \cdot \text{kdim}_n\),
+the flat (1-based) node id of structured index \((i,j,k)\) is
+\begin{equation}
+\mathrm{id}(n,i,j,k) = \underbrace{1 + \sum_{m<n} N_m}_{\text{base}_n} \;+\; k + d_k j + d_k d_j i,
+\end{equation}
+where \(d_j, d_k\) are block \(n\)'s own J/K extents (K fastest-varying,
+Fortran-style). Hexahedra are built by walking every interior
+\((i,j,k)\) cell and gathering its 8 corners via a fixed
+\((-1,0)\)-offset shift table in each axis.
+
+\paragraph{O-grid periodic closure.} The last \(i\)-plane
+(\(i=\text{idim}-1\)) is never stored; any reference to it is rewritten
+as \(i \gets 0\) before evaluating \(\mathrm{id}(\cdot)\) -- an
+\emph{aliasing} closure, not a duplicated node with a periodic link.
+
+\paragraph{C-grid wake-cut fold.} A sub-range of the wall row
+(\(j=0\)) is aliased onto another sub-range of the \emph{same} row via
+a constant index offset:
+\begin{equation}
+i_B \;=\; \omega - i_A, \qquad \omega \;=\; s_{2,B} - s_{2,A},
+\end{equation}
+where \(s_{2,A}, s_{2,B}\) are the two matched NMF sub-range start
+indices. Side \(B\)'s nodes are never stored; every reference to an
+index in \([i_{\mathrm{lo},B}, i_{\mathrm{hi},B}]\) at \(j=0\) is
+rewritten through this map first.
+
+\subsection{Inlet/outlet classification by angle of attack}
+\label{sec:aoa-classify}
+At each farfield boundary point \((i,k)\), with wall-row point
+\(\vecb{p}_w = (x_{i,0,k}, y_{i,0,k})\) and farfield-row point
+\(\vecb{p}_f = (x_{i,\text{jmax},k}, y_{i,\text{jmax},k})\):
+\begin{align}
+\hat{\vecb{d}} &= \frac{\vecb{p}_f - \vecb{p}_w}{\lVert \vecb{p}_f - \vecb{p}_w \rVert}
+&&\text{(local outward direction)} \\
+\vecb{U}_\infty &= (\cos\alpha,\ \sin\alpha)
+&&\text{(free-stream direction, } \alpha = \text{AoA, mesh built at } \alpha=0\text{)} \\
+\text{class} &=
+\begin{cases}
+\text{inlet}, & \hat{\vecb{d}} \cdot \vecb{U}_\infty < 0 \quad \text{(flow enters)}\\
+\text{outlet}, & \hat{\vecb{d}} \cdot \vecb{U}_\infty \ge 0 \quad \text{(flow leaves)}
+\end{cases}
+\end{align}
+For a C-grid, the two wake-end faces are always classified outlet,
+bypassing this test entirely (their own outward direction is not
+meaningfully wall\(\to\)farfield). \textbf{This sign convention has not
+been independently verified} -- see
+\href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/reference/troubleshooting.md}{\texttt{docs/reference/troubleshooting.md}}.
+
+\subsection{Wall-spline fit: natural cubic spline}
+\label{sec:wall-spline}
+Given ordered wall corner points \((x_i, y_i)\), the arc-length
+parametrization is cumulative chord length,
+\begin{equation}
+s_0 = 0, \qquad s_i = s_{i-1} + \lVert \vecb{p}_i - \vecb{p}_{i-1} \rVert .
+\end{equation}
+An open natural cubic spline is fit to \(y(s)\) (and independently to
+\(x(s)\)); on segment \(i\), for \(s_i \le t \le s_{i+1}\), \(\delta t = t - s_i\):
+\begin{equation}
+y(t) = a_i + b_i\,\delta t + c_i\,\delta t^2 + d_i\,\delta t^3 .
+\end{equation}
+The second-derivative values \(M_i = y''(s_i)\) solve the classic
+tridiagonal system with natural boundary conditions \(M_0 = M_n = 0\):
+\begin{equation}
+h_i = s_{i+1}-s_i, \qquad
+h_{i-1} M_{i-1} + 2(h_{i-1}+h_i) M_i + h_i M_{i+1}
+= 6\!\left[\frac{y_{i+1}-y_i}{h_i} - \frac{y_i - y_{i-1}}{h_{i-1}}\right],
+\end{equation}
+solved by the Thomas algorithm (tridiagonal Gaussian elimination:
+forward sweep then back substitution). The per-segment coefficients
+follow directly:
+\begin{align}
+a_i &= y_i, &
+b_i &= \frac{y_{i+1}-y_i}{h_i} - \frac{h_i(2M_i + M_{i+1})}{6}, \\
+c_i &= \frac{M_i}{2}, &
+d_i &= \frac{M_{i+1}-M_i}{6h_i}.
+\end{align}
+
+\subsection{Gmsh periodicity}
+The spanwise periodic pair is declared as a pure translation:
+\begin{equation}
+\text{Periodic Surface } \{k_{\max}\} = \{k_0\}\ \text{Translate}\ (0,0,\text{span}_z).
+\end{equation}
+
+%=====================================================================
+\section{\texttt{Construct2D\_to\_SOD2D/high\_order\_mesh/}}
+\label{sec:c2s-high-order}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/Construct2D_to_SOD2D/high_order_mesh.md}{\texttt{docs/Construct2D\_to\_SOD2D/high\_order\_mesh.md}}.
+
+\subsection{Parametric (arc-length) high-order wall placement}
+\label{sec:parametric-placement}
+For a high-order wall node with reference (Gauss--Lobatto--Legendre)
+coordinate \(\xi_k \in [-1,1]\) along a face's own along-wall axis,
+between two corners matched to spline arc-lengths \(s_{\mathrm{lo}}\),
+\(s_{\mathrm{hi}}\) (segment index \(\mathrm{iseg} = \min\)):
+\begin{align}
+s_f &= s_{\mathrm{lo}} + (s_{\mathrm{hi}} - s_{\mathrm{lo}})\cdot\tfrac{1}{2}(\xi_k + 1), \\
+\delta t &= s_f - s_{\mathrm{iseg}}, \\
+x_t &= a_x + \delta t\,(b_x + \delta t\,(c_x + \delta t\, d_x)), \\
+y_t &= a_y + \delta t\,(b_y + \delta t\,(c_y + \delta t\, d_y)), \\
+\vecb{u}_{\text{buffer}} &= \lambda_{\text{scale}} \cdot \big((x_t,y_t) - (x_{\text{current}}, y_{\text{current}})\big),
+\end{align}
+where \((a,b,c,d)_{x,y}\) are the segment's cubic coefficients from
+Section~\ref{sec:wall-spline} and \(\lambda_{\text{scale}}\) is an optional
+damping factor (default 1, no damping). This is a
+\emph{parametric}, not nearest-point, placement -- deliberately, since
+a Euclidean nearest-point search is a many-to-one map near high
+curvature.
+
+\subsection{Linear elasticity relaxation}
+\label{sec:elasticity-pde}
+The imposed wall displacement becomes a Dirichlet condition; the
+interior solves the isotropic linear elasticity equilibrium equation
+\begin{equation}
+\nabla\cdot\vecb{\sigma} = \vecb{0}, \qquad
+\vecb{\sigma} = \lambda(\nabla\cdot\vecb{u})\,\vecb{I} + 2\mu\,\vecb{\varepsilon}(\vecb{u}), \qquad
+\vecb{\varepsilon}(\vecb{u}) = \tfrac{1}{2}\!\left(\nabla\vecb{u} + \nabla\vecb{u}^{\!\top}\right),
+\end{equation}
+with the Lam\'e parameters computed directly from Young's modulus
+\(E\) and Poisson's ratio \(\nu\):
+\begin{equation}
+\mu = \frac{E}{2(1+\nu)}, \qquad
+\lambda = \frac{E\nu}{(1+\nu)(1-2\nu)} .
+\end{equation}
+Discretized with the same spectral-element basis the flow solver
+itself uses, solved by preconditioned conjugate gradient (block-Jacobi
+or scalar-Laplacian-diagonal preconditioner). After solving, if the
+resulting quality \(\min Q < 10^{-6}\) (an inverted/degenerate
+element), the solver reverts and performs a small grid search over
+\((E,\nu)\) (coarse 2-point, then finer 9-point), re-solving each time
+and keeping whichever combination maximizes \(\min Q\).
+
+%=====================================================================
+\section{\texttt{Construct2D\_to\_NEKRS/linear\_mesh/}}
+\label{sec:c2n-linear}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/Construct2D_to_NEKRS/linear_mesh.md}{\texttt{docs/Construct2D\_to\_NEKRS/linear\_mesh.md}}.
+Extrusion/NMF-remap/node-numbering/AoA-classification math is shared
+with Section~\ref{sec:c2s-linear}--\ref{sec:aoa-classify}. This section
+covers what is genuinely different: Nek5000's own conversion chain and
+Fischer's independently-implemented smoothing algorithm.
+
+\subsection{Format-conversion chain (\texttt{arglist.sh})}
+The spanwise extrusion itself happens \emph{inside} Nek5000's own
+tools, not in Python:
+\begin{equation}
+\texttt{.re2} \xrightarrow{\texttt{re2torea}} \texttt{.rea (2D)}
+\xrightarrow{\texttt{n2to3}} \texttt{.rea (3D, extruded+periodic)}
+\xrightarrow{\texttt{reatore2}} \texttt{.re2 (3D)}.
+\end{equation}
+
+\subsection{Case-parameter extraction from the NMF}
+Reading the native 2D NMF's own \texttt{VISCOUS} entry
+(\(f_1=3\), excluding the C-grid wake-cut \texttt{ONE\_TO\_ONE} pairing):
+\begin{align}
+\text{ring\_width} &= \text{idim} - 1, &
+\text{radial\_rings} &= \text{jmax} - 1, \\
+\text{wall\_start\_element} &= s_1^{\text{VISCOUS}}, &
+\text{wall\_element\_count} &= e_1^{\text{VISCOUS}} - s_1^{\text{VISCOUS}} .
+\end{align}
+
+\subsection{Fischer's natural cubic spline (\texttt{spline}/\texttt{splint})}
+\label{sec:fischer-spline}
+Independently implemented (Fortran77, Numerical Recipes style) but
+mathematically the \emph{same} construction as Section~\ref{sec:wall-spline}:
+natural boundary conditions, tridiagonal solve for \(y''\). Evaluation
+(\texttt{splint}) uses the equivalent cubic-Hermite-style blend, given
+bracketing points \(x_{\mathrm{lo}}, x_{\mathrm{hi}}\) (\(h = x_{\mathrm{hi}}-x_{\mathrm{lo}}\)):
+\begin{align}
+a &= \frac{x_{\mathrm{hi}} - x}{h}, \qquad b = \frac{x - x_{\mathrm{lo}}}{h}, \\
+y &= a\,y_{\mathrm{lo}} + b\,y_{\mathrm{hi}} + \big[(a^3-a)\,y''_{\mathrm{lo}} + (b^3-b)\,y''_{\mathrm{hi}}\big]\frac{h^2}{6}.
+\end{align}
+Every high-order node is placed at its own GLL-reference arc-length
+fraction along its segment,
+\begin{equation}
+s_f(j,e) = s_{i-1} + \tfrac{1}{2}\,\mathrm{ds}\,(\zeta_j + 1), \qquad \zeta_j = \text{the GLL reference coordinate} \in[-1,1],
+\end{equation}
+the same conceptual move as Section~\ref{sec:parametric-placement} --
+independently arrived at in a separate codebase.
+
+\subsection{Weighted-Laplace boundary blending}
+\label{sec:weighted-laplace}
+Given the wall's own displacement field \(\delta u\) (from
+Section~\ref{sec:fischer-spline}), extend it into the volume by solving a
+\emph{weighted Laplace} equation (not the full elasticity tensor of
+Section~\ref{sec:elasticity-pde}):
+\begin{equation}
+\nabla\cdot\big(h_1(\vecb{x})\,\nabla u\big) = 0, \qquad u = \delta u \ \text{on the wall}.
+\end{equation}
+Boundary-layer protection via a spatially-varying diffusion coefficient:
+\begin{align}
+\delta &= \frac{\text{volume(wall-adjacent elements)}}{\text{surface area(wall-adjacent elements)}}
+&&\text{(avg. boundary-layer element thickness)}\\
+\delta_p &= 5\delta && \text{(``protected'' thickness)} \\
+h_1(\vecb{x}) &= 1 + 9\exp\!\left(-\Big(\frac{d(\vecb{x})}{\delta_p}\Big)^{\!2}\right)
+&&\text{(} d = \text{distance to wall; } h_1 \to 10 \text{ at the wall, } \to 1 \text{ far away)}
+\end{align}
+Solved via the standard Dirichlet-lift decomposition \(u = u_0 + u_b\)
+(\(u_b\) = boundary data extended by duplicate-node averaging;
+\(u_0=0\) on Dirichlet boundaries):
+\begin{equation}
+\bar A\, u_0 = -M \bar A\, u_b,
+\end{equation}
+where \(\bar A\) is the (weighted) Laplace/Helmholtz operator and
+\(M\) the interior/Dirichlet mask; \(x\)- and \(y\)-displacement are
+solved as two independent scalar problems (no shear/Poisson coupling
+between components, unlike Section~\ref{sec:elasticity-pde}).
+
+%=====================================================================
+\section{\texttt{Construct2D\_to\_NEKRS/high\_order\_mesh/}}
+\label{sec:c2n-high-order}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/Construct2D_to_NEKRS/high_order_mesh.md}{\texttt{docs/Construct2D\_to\_NEKRS/high\_order\_mesh.md}}.
+No new smoothing math: this step \emph{interpolates} Section~\ref{sec:c2n-linear}'s
+already-corrected, fixed-order (\(\ell x_1=4\)) reference sampling onto
+the production mesh's own (possibly different) polynomial order via a
+standard Lagrange-basis change-of-interpolant operation
+(\texttt{map\_m\_to\_n}: an \(m\)-point to \(n\)-point GLL resampling),
+then copies that corrected \((x,y)\) identically to every spanwise
+plane (pure-translation extrusion, so no recomputation needed there):
+\begin{equation}
+x_{m1}(i,j,i_z,e) = x_{m1}(i,j,1,e) \quad \forall\, i_z = 2,\dots,\ell z_1 .
+\end{equation}
+
+%=====================================================================
+\section{\texttt{pyHyp/}}
+\label{sec:pyhyp}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/pyHyp/README.md}{\texttt{docs/pyHyp/README.md}}.
+pyHyp's own hyperbolic marching PDE is an external tool, out of scope.
+This section covers this repo's own surface-preprocessing math.
+
+\subsection{Surface coarsening}
+Keep every other structured-grid index, plus the last index
+unconditionally (so both endpoints of an axis are always retained):
+\begin{equation}
+\text{keep}(n) = \{0, 2, 4, \dots\} \cup \{n-1\}.
+\end{equation}
+
+\subsection{Local surface curvature}
+\label{sec:curvature}
+Given a per-block bicubic Hermite surface fit \(\vecb{P}(s,t)\)
+(evaluated per-cell, finite-difference step \(\varepsilon\)):
+\begin{align}
+\vecb{P}_s &= \pd{\vecb{P}}{s}, \quad \vecb{P}_t = \pd{\vecb{P}}{t}
+&&\text{(central difference)} \\
+\vecb{P}_{ss}, \vecb{P}_{tt}, \vecb{P}_{st} &&&\text{(central-difference 2nd partials)} \\
+\hat{\vecb{n}} &= \frac{\vecb{P}_s \times \vecb{P}_t}{\lVert \vecb{P}_s \times \vecb{P}_t \rVert}
+&&\text{(unit normal)}
+\end{align}
+First fundamental form \(E,F,G\) and second fundamental form \(L,M,N\):
+\begin{equation}
+E = \vecb{P}_s\!\cdot\!\vecb{P}_s,\ \ F = \vecb{P}_s\!\cdot\!\vecb{P}_t,\ \ G = \vecb{P}_t\!\cdot\!\vecb{P}_t;
+\qquad
+L = \vecb{P}_{ss}\!\cdot\!\hat{\vecb{n}},\ \ M = \vecb{P}_{st}\!\cdot\!\hat{\vecb{n}},\ \ N = \vecb{P}_{tt}\!\cdot\!\hat{\vecb{n}} .
+\end{equation}
+Mean curvature \(H\), Gaussian curvature \(K\), and total curvature
+magnitude \(\kappa\):
+\begin{equation}
+H = \frac{EN + GL - 2FM}{2(EG-F^2)}, \qquad
+K = \frac{LN - M^2}{EG - F^2}, \qquad
+\kappa = \sqrt{\max(4H^2 - 2K,\ 0)} \;\big(= \sqrt{k_1^2+k_2^2}\big).
+\end{equation}
+
+\subsection{Curvature monitor field}
+Per-cell curvature is clipped at its own 99.5th percentile (outlier
+robustness), normalized by the block's own median \(\kappa_{\mathrm{ref}}\),
+scaled by an aggressiveness parameter \(\beta\), and capped:
+\begin{equation}
+m_{\text{cell}} = \min\!\left(1 + \beta\,\frac{\kappa_{\text{cell}}}{\kappa_{\mathrm{ref}}},\ \ m_{\max}\right),
+\end{equation}
+then averaged onto nodes over each node's up-to-4 surrounding cells.
+\(\beta=0 \Rightarrow m \equiv 1\) (recovers plain, uniform elliptic
+smoothing).
+
+\subsection{Curvature-weighted 1D equidistribution}
+\label{sec:equidistribution}
+Redistributes a curve's own points to equal increments of
+\emph{weighted} arc length. With chord-length parameter \(s\), total
+length \(S\), and monitor \(m(s)\) (linearly interpolated from a fine
+resampling):
+\begin{equation}
+W(s) = \int_0^s m(\sigma)\,\dd\sigma, \qquad
+s_i = W^{-1}\!\left(\frac{i}{n-1}\,W(S)\right), \quad i=0,\dots,n-1,
+\end{equation}
+monotonic by construction; \(m\equiv 1\) reproduces uniform arc-length
+spacing exactly.
+
+\subsection{Weighted elliptic relaxation + Newton reprojection}
+\label{sec:newton-reprojection}
+Each interior point is damped-relaxed toward its curvature-weighted
+4-neighbor average (the discrete equilibrium of a spring network with
+local stiffness set by curvature), then reprojected onto the true
+surface via local Gauss--Newton refinement of its own \((s,t)\)
+location:
+\begin{align}
+\vecb{r} &= \vecb{x}_{\text{target}} - \vecb{P}(s,t), \\
+\vecb{J} &= \big[\vecb{P}_s,\ \vecb{P}_t\big] \quad\text{(a } 3\times2 \text{ matrix)}
+&&\text{(central-difference Jacobian)} \\
+\delta &= \big(\vecb{J}^{\!\top}\vecb{J} + \eta \vecb{I}\big)^{-1} \vecb{J}^{\!\top}\vecb{r},
+\qquad \eta = 10^{-12}
+&&\text{(regularized normal equations)} \\
+(s,t) &\leftarrow (s,t) + \delta .
+\end{align}
+\(s,t\) are allowed to run outside \([0,1]\) mid-solve; an overflow
+converts into an exact cell-index shift (cells are \(C^0\)-continuous
+at \(s=1\)/\(t=1\)), and the Newton solve resumes in the new cell.
+
+%=====================================================================
+\section{\texttt{etaGrid\_to\_SOD2D/}}
+\label{sec:etagrid}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/etaGrid_to_SOD2D/README.md}{\texttt{docs/etaGrid\_to\_SOD2D/README.md}}.
+
+\subsection{Airfoil curve: fit and differential geometry}
+Arc-length parametrization as in Section~\ref{sec:wall-spline}; a full cubic
+spline \(\vecb{P}(s) = (\mathrm{spline}_x(s), \mathrm{spline}_y(s))\)
+(\texttt{scipy.interpolate.CubicSpline}, not-a-knot end conditions).
+Tangent and outward normal:
+\begin{equation}
+\hat{\vecb{t}}(s) = \frac{\vecb{P}(s+\varepsilon) - \vecb{P}(s-\varepsilon)}{2\varepsilon}
+\Big/ \Big\lVert \cdot \Big\rVert, \qquad
+\hat{\vecb{n}}(s) = \big(t_y(s),\ -t_x(s)\big) \quad (\text{tangent rotated } -90^\circ).
+\end{equation}
+
+\subsection{Vinokur (1983) two-sided stretching}
+\label{sec:vinokur}
+Redistributes \(n\) points along a segment with independently
+specified first/last spacing \(\delta s_0, \delta s_1\) (as fractions
+of the segment's own total length; \(s_0 = \delta s_0 (n-1)\),
+\(s_1 = \delta s_1(n-1)\)):
+\begin{equation}
+A = \sqrt{s_1/s_0}, \qquad B = \frac{1}{\sqrt{s_0 s_1}} .
+\end{equation}
+\textbf{Case \(B>1\)} (spacings smaller than uniform): solve
+\(\sinh(\Delta y)/\Delta y = B\) for \(\Delta y\) by Newton's method
+(seeded by a small-\((B-1)\) series expansion, or
+\(\log(2B)+\log\log(2B)\) for large \(B\)); then, with
+\(\xi = i/(n-1)\),
+\begin{equation}
+u(\xi) = \frac{1}{2}\left(1 + \frac{\tanh\!\big(\Delta y(\xi - \tfrac12)\big)}{\tanh(\Delta y/2)}\right).
+\end{equation}
+\textbf{Case \(B<1\)}: the same construction with \(\sin\)/\(\tan\) in
+place of \(\sinh\)/\(\tanh\), solving \(\sin(\Delta y)/\Delta y = B\).
+\textbf{Case \(B\approx1\)}: \(u(\xi) = \xi\) (uniform). Finally,
+\begin{equation}
+t = \frac{u}{A + (1-A)u}, \qquad t_0 = 0,\ t_{n-1} = 1 \ \text{(exact)} .
+\end{equation}
+Points are evaluated at \(t\cdot(\text{total length})\) through a
+cubic-spline fit of the \emph{original} segment, so resampled points
+still lie exactly on the input curve.
+
+\subsection{Body-wrap sweep geometry}
+\label{sec:etagrid-sweep}
+Given a YZ cross-section local coordinate \((Y_j, Z_j)\) at arc-length
+station \(s_k\):
+\begin{align}
+X(k,j) &= P_x(s_k) + Y_j\, n_x(s_k), \\
+Y(k,j) &= P_y(s_k) + Y_j\, n_y(s_k), \\
+Z(k,j) &= Z_j,
+\end{align}
+i.e. a ruled-surface-style offset sweep: at \(Y_j=0\) every station
+lands exactly on the true curve; away from the wall, each node is
+carried at a fixed offset \emph{along the local normal at that
+station} -- contrast with Section~\ref{sec:c2s-linear}'s pure-translation
+extrusion.
+
+\paragraph{Orientation.} A swept hex's signed volume,
+\begin{equation}
+V = (\vecb{e}_1 \times \vecb{e}_2)\cdot \vecb{e}_3, \qquad
+\vecb{e}_1 = \vecb{p}_1-\vecb{p}_0,\ \vecb{e}_2=\vecb{p}_3-\vecb{p}_0,\ \vecb{e}_3=\vecb{p}_4-\vecb{p}_0,
+\end{equation}
+can come out uniformly negative across an entire swept region
+(handedness ambiguity between the cross-section's own 2D winding and
+the local sweep direction); corrected by a node-order swap
+\([4,5,6,7,0,1,2,3]\) when the majority of a sampled batch is negative.
+
+\subsection{Wake growth: geometric offset series}
+\label{sec:wake-growth}
+Downstream station offsets \(x_0=0, x_1=s_0, x_2=s_0(1+r), \dots\)
+reach \(\text{total}\) in exactly \(n\) layers, where the ratio \(r\)
+solves
+\begin{equation}
+f(r) = s_0\,\frac{r^n - 1}{r-1} = \text{total} \qquad (f(r)\to s_0 n \text{ as } r\to1),
+\end{equation}
+via bisection over \(r\in[1,\infty)\) (no closed form for general
+\(n\)).
+
+\subsection{Boundary classification (local coordinates)}
+\begin{equation}
+\text{wall}: |Y-Y_{\min}|<\text{tol}, \quad
+\text{outer}: |Y-Y_{\max}|<\text{tol}, \quad
+\text{periodic}_{0,1}: |Z-Z_{\min,\max}|<\text{tol},
+\end{equation}
+applied identically at every swept station since it depends only on
+the cross-section's own local \((Y,Z)\), never on 3D position.
+
+\subsection{Wavy-wall perturbation}
+\label{sec:wavy-wall}
+A second, independent displacement applied on top of an already
+spline-smoothed wall, along the local outward normal:
+\begin{equation}
+\Delta(s,z) = A_{\text{frac}}\cdot c \cdot \mathrm{tent}\!\left(n_w\frac{z-z_{\min}}{z_{\text{span}}}\right)\cdot \tau(s),
+\end{equation}
+where \(c\) is the chord (auto-computed as the spline table's own
+\(X\)-extent), \(A_{\text{frac}}\) an amplitude fraction, \(n_w\) an
+integer wavenumber.
+
+\paragraph{Chordwise taper.}
+\begin{equation}
+\tau(s) = \sin^2\!\left(\pi \frac{s}{s_{\text{total}}}\right),
+\end{equation}
+zero \emph{with zero slope} at both \(s=0\) and \(s=s_{\text{total}}\)
+(both ends of the arc-length parametrization are the trailing edge),
+peaking at the leading edge \(s = s_{\text{total}}/2\).
+
+\paragraph{Spanwise unipolar tent wave.} With phase
+\(\varphi = n_w (z-z_{\min})/z_{\text{span}} \bmod 1\):
+\begin{equation}
+\mathrm{tent}(\varphi) = 1 - |2\varphi - 1|, \qquad \varphi\in[0,1),
+\end{equation}
+range \([0,1]\): zero (the \emph{original}, undisplaced surface -- the
+trough) at \(\varphi=0,1\); peak \(1\) at \(\varphi=0.5\). Because
+\(n_w\) is an integer, \(\varphi\) at \(z=z_{\max}\) is exactly an
+integer, so the wave is \emph{exactly} zero at both spanwise-periodic
+boundaries.
+
+\paragraph{Local tangent (Fortran evaluation).} Reusing the cubic
+segment coefficients of Section~\ref{sec:wall-spline}:
+\begin{equation}
+t_x = b_x + \delta t\,(2c_x + 3\delta t\, d_x), \qquad
+t_y = b_y + \delta t\,(2c_y + 3\delta t\, d_y), \qquad
+\hat{\vecb{n}} = \frac{(t_y,-t_x)}{\lVert(t_x,t_y)\rVert} .
+\end{equation}
+The full imposed displacement is then
+\(\vecb{u}_{\text{buffer}} = \Delta(s,z)\,\hat{\vecb{n}}\), with
+\(u_{\text{buffer},z} \equiv 0\) always (displacement confined to the
+local \(X\)–\(Y\) plane at every \(Z\)).
+
+\subsection{Wall-node arc-length recovery (verification)}
+\label{sec:newton-search}
+For an already-placed wall node, recover \(s\) via Newton/Gauss--Newton
+search minimizing \(\lVert \vecb{P}(s) - \vecb{x}\rVert^2\):
+\begin{equation}
+f(s) = \big(\vecb{P}(s)-\vecb{x}\big)\cdot\hat{\vecb{t}}(s), \qquad
+f'(s) \approx \hat{\vecb{t}}(s)\cdot\hat{\vecb{t}}(s) \quad\text{(Gauss--Newton)}, \qquad
+s \leftarrow s - f(s)/f'(s),
+\end{equation}
+seeded from the nearest of the curve's own control points; converges
+in a handful of steps given a point already close to the curve.
+
+%=====================================================================
+\section{Cross-cutting: boundary conditions}
+\label{sec:bc-reference}
+See \href{https://github.com/kvishalrai/AeroHexMesh/blob/master/docs/reference/boundary-conditions.md}{\texttt{docs/reference/boundary-conditions.md}}
+for the full physical-id table and \texttt{bc\_type} string reference
+(not reproduced here as it is not mathematical content); the
+inlet/outlet classification math is Section~\ref{sec:aoa-classify} above,
+shared verbatim by every Gmsh-based pipeline that needs it.
+
+\end{document}
