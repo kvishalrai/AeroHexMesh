@@ -2,22 +2,31 @@
 
 *Computational Aerodynamics with Hexahedral Meshes*
 
-A framework for generating high-order, spanwise-extruded 3D meshes (O-grid or
-C-grid) for spectral-element CFD solvers, starting from a 2D
-[Construct2D](https://sourceforge.net/projects/construct2d/) grid. Although
-built and tested around airfoils, nothing in the pipeline is airfoil-specific
-— it works from any closed 2D curve Construct2D can mesh.
+A framework for generating high-order hexahedral 3D meshes for
+spectral-element CFD solvers, built around three independent front ends —
+pick whichever matches the geometry and resolution you actually have:
 
 ```
 Construct2D             Construct2D_to_<SOLVER>/
 2D closed    ───────►   extrude, convert, partition, smooth the
 curve .p3d/.nmf          wall boundary for the target solver
+
+3D surface   ───────►   pyHyp/
+mesh (wing,              hyperbolic-march a volume mesh outward
+wall-to-wall)            from the surface
+
+YZ cross-    ───────►   etaGrid_to_SOD2D/
+section mesh             sweep it around an airfoil curve + a
+(any quad grid)          C-grid wake, convert, partition, smooth
 ```
 
-Each `Construct2D_to_<SOLVER>/` directory is a self-contained pipeline from
-the shared 2D Construct2D grid to a smoothed, solver-ready 3D mesh — see its
-own README for the details of that pipeline's stages. For the math behind
-every algorithm and how it's implemented, see [`docs/`](docs/README.md).
+Each is a self-contained pipeline from its own starting geometry to a
+smoothed, solver-ready 3D mesh — see its own README for the details of
+that pipeline's stages. Although built and tested around airfoils,
+nothing in the `Construct2D_to_<SOLVER>/` pipelines is airfoil-specific —
+they work from any closed 2D curve Construct2D can mesh. For the math
+behind every algorithm and how it's implemented, see
+[`docs/`](docs/README.md).
 
 ## Repository layout
 
@@ -56,9 +65,11 @@ git submodule update --init --recursive
 
 ## Prerequisites
 
-Each `Construct2D_to_<SOLVER>/` pipeline has its own prerequisites and build
-instructions — see its README (e.g.
-[`Construct2D_to_SOD2D/README.md`](Construct2D_to_SOD2D/README.md)).
+Each pipeline directory has its own prerequisites and build instructions —
+see its README (e.g.
+[`Construct2D_to_SOD2D/README.md`](Construct2D_to_SOD2D/README.md),
+[`pyHyp/README.md`](pyHyp/README.md),
+[`etaGrid_to_SOD2D/README.md`](etaGrid_to_SOD2D/README.md)).
 
 Generated mesh, results, and log files (`*.hdf`, `*.h5`, `*.msh`, `*.log`,
 etc.) are gitignored — regenerate them by running the relevant pipeline
@@ -124,6 +135,29 @@ authors:
 - **[p3d2nek](https://github.com/yslan/p3d2nek)** (YuHsiang Lan, Argonne
   National Laboratory) — a MATLAB-based alternative to this pipeline's
   Python/Gmsh-based `p3d_to_gmsh_nek.py` + `gmsh2nek` route.
+
+### `pyHyp/` pipeline
+
+- **[pyHyp](https://github.com/mdolab/pyhyp)** and
+  **[cgnsutilities](https://github.com/mdolab/cgnsutilities)** — MDO Lab
+  (University of Michigan), external dependencies built from source (not
+  vendored); see [`pyHyp/README.md`](pyHyp/README.md#prerequisites) for
+  the build recipe. `generate_volume_mesh.py` is a thin CLI wrapper
+  around `pyhyp`'s own Python API.
+- The bundled `example_m6_wing/m6_small.fmt` surface mesh is taken from
+  pyHyp's own test suite.
+
+### `etaGrid_to_SOD2D/` pipeline
+
+- Reuses `Construct2D_to_SOD2D/linear_mesh/wall_spline.py` and
+  `sod2d_tools/gmsh2sod2d.py`/`tool_meshConversorPar` unmodified (see
+  above) — the sweep/wake/boundary-classification code around them is
+  original to this repo.
+- Adds a new wall-perturbation mode
+  (`imposedDisplacement_elasticitySolverBufferWavyWall`, dispatched via
+  `wavy_wall_amplitude_fraction`/`wavy_wall_wavenumber`) directly to
+  SOD2D's own `MeshElasticitySolver.f90`, alongside its existing
+  Fischer-derived spline mechanism (same BSC credit as above).
 
 ## References & Acknowledgements
 
