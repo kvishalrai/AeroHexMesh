@@ -52,6 +52,19 @@ This framework builds meshes for these spectral-element CFD codes:
 | [Nek5000](https://github.com/Nek5000/Nek5000) | Incompressible & low-Mach; CPU-based (ANL) | [Docs](https://nek5000.github.io/NekDoc/) | [Fischer 1997](https://doi.org/10.1006/jcph.1997.5651) |
 | [NekRS](https://github.com/Nek5000/nekRS) | Incompressible & low-Mach; GPU-oriented successor to Nek5000 (ANL/UIUC/PSU) | [Docs](https://nekrsdoc.readthedocs.io/en/latest/) | [Fischer et al. 2021](https://arxiv.org/abs/2104.05829) |
 
+## Future Work
+
+- **Validate against AIAA Drag Prediction Workshop (DPW) geometries** —
+  the [DPW series](https://www.aiaa-dpw.org/) provides standardized,
+  community-vetted transport-aircraft wing/wing-body geometries and
+  grids used for CFD code-to-code comparison exercises;
+  [DPW8's geometries](https://dpw.larc.nasa.gov/DPW8/) would be a
+  natural next validation target for `pyHyp/` (real tapered/swept wing
+  surfaces, beyond the ONERA M6 wing example) and `etaGrid_to_SOD2D/`
+  (wall-resolved meshing on a full transport wing, beyond the NACA0012
+  case), going past today's simple/canonical airfoil and wing test cases
+  toward standard, publicly-comparable aircraft geometries.
+
 ## Getting the code
 
 ```bash
