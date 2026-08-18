@@ -20,7 +20,7 @@
 module purge
 module load nvidia-hpc-sdk/24.3 hdf5/1.14.1-2-nvidia-nvhpcx
 
-SOD2D_SRC_DIR=../../Construct2D_to_SOD2D/CFD_code/sod2d_gitlab/build_p2/src/app_sod2d/
+SOD2D_SRC_DIR=../../CFD_solvers/sod2d_gitlab/build_p2/src/app_sod2d/
 
 export UCX_TLS=rc,cuda_copy,cuda_ipc,sm,self
 

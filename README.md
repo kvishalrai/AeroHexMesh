@@ -37,6 +37,7 @@ behind every algorithm and how it's implemented, see
 | `Construct2D_to_NEKRS/` | 2D grid → smoothed, spanwise-periodic 3D mesh for [NekRS](https://github.com/Nek5000/nekRS). See its own [README](Construct2D_to_NEKRS/README.md). |
 | `pyHyp/` | 3D surface mesh → volume mesh by hyperbolic extrusion, for real (tapered/swept) 3D shapes rather than a spanwise-extruded 2D section. See its own [README](pyHyp/README.md). |
 | `etaGrid_to_SOD2D/` | Arbitrary YZ cross-section mesh, swept around an airfoil curve (not just spanwise-translated) and into a C-grid wake, for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](etaGrid_to_SOD2D/README.md). |
+| `CFD_solvers/` | The CFD solver git submodules (SOD2D, Nek5000, NekRS) themselves, shared across every pipeline above that targets that solver — not a pipeline of its own. See [Credits](#credits) for what's included and where. |
 
 Additional `Construct2D_to_<SOLVER>/` pipelines may be added following the
 same pattern.
@@ -96,7 +97,9 @@ authors:
 - **[SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab)** — Copyright ©
   2022 Lucas Gasparino, Jordi Muela and Oriol Lehmkuhl (Barcelona
   Supercomputing Center), MIT License. Included as the
-  `Construct2D_to_SOD2D/CFD_code/sod2d_gitlab` git submodule.
+  [`CFD_solvers/sod2d_gitlab`](CFD_solvers) git submodule — shared at the
+  repo root, since `etaGrid_to_SOD2D/` and `pyHyp_to_SOD2D/` build
+  against this same copy too.
   - SOD2D itself uses **[GeMPa](https://gitlab.com/rickbp/gempa)**
     (Ricard Borrell, BSC) for mesh partitioning, and
     **[json-fortran](https://github.com/jacobwilliams/json-fortran)**
@@ -125,8 +128,9 @@ authors:
 - **[Nek5000](https://github.com/Nek5000/Nek5000)** and
   **[NekRS](https://github.com/Nek5000/nekRS)** — Copyright © UChicago
   Argonne, LLC, BSD-3-Clause-style license. Included as the
-  `Construct2D_to_NEKRS/CFD_code/{Nek5000,nekRS}` git submodules; their own
-  mesh tools (`gmsh2nek`, `genmap`, `re2torea`, `reatore2`, `n2to3`) drive
+  [`CFD_solvers/{Nek5000,nekRS}`](CFD_solvers) git submodules — shared at
+  the repo root, for any future NekRS-consuming pipeline; their own mesh
+  tools (`gmsh2nek`, `genmap`, `re2torea`, `reatore2`, `n2to3`) drive
   most of `linear_mesh/`'s pipeline.
 - **`linear_mesh/smooth_2D/naca_gen_spline_info.usr`**'s `smooth_geom0`/
   `smooth_geom` — Paul Fischer's (UIUC / Argonne National Laboratory)

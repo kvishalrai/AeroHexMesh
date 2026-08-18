@@ -69,11 +69,13 @@ partition, and smooth the mesh*, then *run it*.
    production-run stage in this repo — copy the smoothed mesh this step
    writes out wherever you actually want to run your simulation.
 
-## `CFD_code/`
+## `CFD_solvers/sod2d_gitlab/`
 
-`CFD_code/sod2d_gitlab/` is [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab)
-itself — an external codebase this pipeline depends on but doesn't own,
-included as a git submodule (see the top-level README's
+[SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab) itself — an external
+codebase this pipeline depends on but doesn't own, included as a git
+submodule at the repo root's [`CFD_solvers/`](../CFD_solvers) (shared
+with `etaGrid_to_SOD2D/` and `pyHyp_to_SOD2D/`, which also build against
+this same copy — see the top-level README's
 [Credits](../README.md#credits)). It's currently pinned to the
 `277-witness-points-using-wrong-connectivity` branch, which carries the
 parametric arc-length wall-smoothing placement described above. Both
@@ -85,8 +87,8 @@ stages above depend on tools/binaries built from it:
 | `sod2d_gitlab/tool_meshConversorPar` | `linear_mesh/` (partitioning step) | CPU-only, `-DTOOL_MESHPART=ON` at CMake configure time |
 | `sod2d_gitlab`'s `sod2d` app (`MeshElasticitySolver` case) | `high_order_mesh/` | GPU build (`build_gpu`), see `high_order_mesh/airfoil0.sh` |
 
-See `sod2d_gitlab`'s own [README](CFD_code/sod2d_gitlab/README.md) for
-full build instructions.
+See `sod2d_gitlab`'s own [README](../CFD_solvers/sod2d_gitlab/README.md)
+for full build instructions.
 
 ## Prerequisites
 
@@ -94,7 +96,7 @@ full build instructions.
 - [Gmsh](https://gmsh.info/), invoked as a CLI.
 - MPI and HDF5, for mesh partitioning and running SOD2D.
 - SOD2D itself, built from the `sod2d_gitlab` submodule — see
-  [`CFD_code/`](#cfd_code) above.
+  [`CFD_solvers/sod2d_gitlab/`](#cfd_solverssod2d_gitlab) above.
 
 **No mesh, results, or log files are stored in this repo** (`*.hdf`,
 `*.h5`, `*.msh`, `*.log`, etc.) — they're all excluded on purpose.

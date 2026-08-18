@@ -25,7 +25,7 @@ This step uses SOD2D's own `MeshElasticitySolver` to:
    corrected wall, rather than the wall nodes being moved in isolation.
 
 Implementation lives in
-`../CFD_code/sod2d_gitlab/src/lib_mainBaseClass/sources/MeshElasticitySolver.f90`,
+`../../CFD_solvers/sod2d_gitlab/src/lib_mainBaseClass/sources/MeshElasticitySolver.f90`,
 in `imposedDisplacement_elasticitySolverBufferSplineWall` — this is the
 **default** binding, so no rebuilding SOD2D is needed to use it.
 

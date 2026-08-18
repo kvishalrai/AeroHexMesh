@@ -65,7 +65,7 @@ callable as a Python library, which SOD2D's are and Nek5000's aren't).
 - [Gmsh](https://gmsh.info/), invoked as a CLI (`gmsh airfoil_per.geo -0`).
 - MPI (`mpirun`) and HDF5, for the partitioning step.
 - `sod2d_tools/gmsh2sod2d.py` and `sod2d_tools/tool_meshConversorPar` both
-  come from the SOD2D repo itself (`../CFD_code/sod2d_gitlab/utils/gmsh2sod2d/`
+  come from the SOD2D repo itself (`../../CFD_solvers/sod2d_gitlab/utils/gmsh2sod2d/`
   and `.../tool_meshConversorPar/`), **not included in this repo** as
   build/binary artifacts:
   - `gmsh2sod2d.py` is a plain script — copy it (or symlink it) in from the

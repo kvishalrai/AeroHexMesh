@@ -58,7 +58,7 @@ Mechanics* (<https://arxiv.org/abs/2605.01015>); this pipeline builds the
    the wall's local outward normal — amplitude tapering smoothly to zero
    at both trailing-edge ends of the arc-length parametrization and at
    both spanwise-periodic boundaries, never displacing inward. This is a
-   genuine addition to `CFD_code/sod2d_gitlab`'s
+   genuine addition to `CFD_solvers/sod2d_gitlab`'s
    `MeshElasticitySolver.f90` (`imposedDisplacement_elasticitySolverBufferWavyWall`,
    dispatched via the new `wavy_wall_amplitude_fraction`/
    `wavy_wall_wavenumber` JSON fields) — the submodule needs rebuilding
@@ -95,9 +95,9 @@ To be replaced with a repaired version.
 - Python 3 with `numpy`, `scipy` (`CubicSpline`), and the `gmsh` Python
   package (also used as a CLI for order elevation).
 - MPI and HDF5, for mesh partitioning and running SOD2D.
-- SOD2D itself, built from `Construct2D_to_SOD2D/CFD_code/sod2d_gitlab`
-  (this pipeline reuses that same submodule and its `build_p2` build —
-  see its own README) — `MeshElasticitySolver.f90`'s wavy-wall addition
+- SOD2D itself, built from `CFD_solvers/sod2d_gitlab` (this pipeline
+  reuses that same shared submodule and its `build_p2` build — see its
+  own README) — `MeshElasticitySolver.f90`'s wavy-wall addition
   needs that build rebuilt to pick it up (`build_p2/rebuild_p2.job`).
 - `gmsh2sod2d.py` and `tool_meshConversorPar` from
   `Construct2D_to_SOD2D/linear_mesh/sod2d_tools/` (reused directly, not

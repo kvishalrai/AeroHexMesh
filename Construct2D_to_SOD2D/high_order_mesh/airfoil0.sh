@@ -46,7 +46,7 @@
 module purge
 module load nvidia-hpc-sdk/24.3 hdf5/1.14.1-2-nvidia-nvhpcx
 
-SOD2D_SRC_DIR=../CFD_code/sod2d_gitlab/build_gpu/src/app_sod2d/
+SOD2D_SRC_DIR=../../CFD_solvers/sod2d_gitlab/build_gpu/src/app_sod2d/
 
 # Two unrelated crashes have been seen running this on a large mesh with
 # 3+ partitions, and both workarounds below are needed together -- if

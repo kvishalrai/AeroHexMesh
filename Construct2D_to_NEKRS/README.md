@@ -71,20 +71,21 @@ written by **Paul Fischer** (UIUC / Argonne National Laboratory) — see the
 top-level README's [Credits](../README.md#credits) for the full
 attribution.
 
-## `CFD_code/`
+## `CFD_solvers/Nek5000` and `CFD_solvers/nekRS`
 
-`CFD_code/Nek5000` and `CFD_code/nekRS` are included as git submodules —
-external codebases this pipeline depends on but doesn't own (see the
-top-level README's [Credits](../README.md#credits)). Both stages above
-call small command-line tools built from Nek5000's source, plus NekRS
-itself:
+Included as git submodules at the repo root's
+[`CFD_solvers/`](../CFD_solvers) (shared with any future NekRS-consuming
+pipeline) — external codebases this pipeline depends on but doesn't own
+(see the top-level README's [Credits](../README.md#credits)). Both
+stages above call small command-line tools built from Nek5000's source,
+plus NekRS itself:
 
 | Tool | Used by | Build notes |
 |---|---|---|
 | `Nek5000/bin/gmsh2nek` | `linear_mesh/` (2D mesh → Nek5000's own `.re2` format) | `tools/maketools gmsh2nek` |
 | `Nek5000/bin/genmap` | `linear_mesh/smooth_2D/` | `tools/maketools genmap` |
 | `Nek5000/bin/{re2torea,reatore2,n2to3}` | `linear_mesh/arglist.sh` (builds the 3D mesh) | `tools/maketools re2torea reatore2 n2to3` (`re2torea`/`reatore2` share one makefile) |
-| NekRS itself | `high_order_mesh/example_nekrs/` | large GPU build — see nekRS's own [build docs](CFD_code/nekRS/README.md), or use an existing site install as `example_nekrs/airfoil0.sh` does |
+| NekRS itself | `high_order_mesh/example_nekrs/` | large GPU build — see nekRS's own [build docs](../CFD_solvers/nekRS/README.md), or use an existing site install as `example_nekrs/airfoil0.sh` does |
 
 ## Prerequisites
 

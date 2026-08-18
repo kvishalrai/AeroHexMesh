@@ -71,8 +71,8 @@ a short pipeline of separate programs, not a design choice made here.
 - [Gmsh](https://gmsh.info/), invoked as a CLI.
 - MPI, for Nek5000.
 - `gmsh2nek`, `genmap`, `re2torea`, `reatore2`, `n2to3` built from the
-  `../CFD_code/Nek5000` submodule — see the top-level
-  [`Construct2D_to_NEKRS/README.md`](../README.md#cfd_code).
+  `../../CFD_solvers/Nek5000` submodule — see the top-level
+  [`Construct2D_to_NEKRS/README.md`](../README.md#cfd_solversnek5000-and-cfd_solversnekrs).
 
 ## Computing case parameters
 
