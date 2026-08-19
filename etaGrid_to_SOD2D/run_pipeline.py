@@ -225,7 +225,13 @@ def main():
         "gmsh_filePath": "", "gmsh_fileName": f"{args.basename}_hi",
         "mesh_h5_filePath": "", "mesh_h5_fileName": f"{args.basename}_hi",
         "num_partitions": args.num_partitions, "eval_mesh_quality": 0,
-        "lineal_output": True, "uns_per_links": False,
+        # This pipeline's whole premise is an unstructured (but quad)
+        # cross-section (see the top-level README) -- tool_meshConversorPar's
+        # default periodic-link matching assumes a structured mesh and
+        # crashes ("Is your mesh unstuctured and periodic? Activate flag
+        # uns_per_links!") on a genuinely unstructured one, so this is
+        # always True here, not conditional.
+        "lineal_output": True, "uns_per_links": True,
     }
     (work_dir / "input.json").write_text(json.dumps(input_json, indent=4))
     print("(Run tool_meshConversorPar separately -- needs the SOD2D partitioner's own environment, see "
