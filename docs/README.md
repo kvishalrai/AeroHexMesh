@@ -14,7 +14,7 @@ and go deeper rather than repeating it.
 | Folder | Docs |
 |---|---|
 | `Construct2D/` | [`Construct2D/README.md`](Construct2D/README.md) — batch-mode driving, auxiliary scripts |
-| `Construct2D_to_SOD2D/` | [`linear_mesh.md`](Construct2D_to_SOD2D/linear_mesh.md) — extrusion, NMF remap, node aliasing, AoA classification, wall-spline fit, Gmsh/SOD2D export<br>[`high_order_mesh.md`](Construct2D_to_SOD2D/high_order_mesh.md) — arc-length wall placement, linear elasticity PDE |
+| `Construct2D_to_SOD2D/` | [`linear_mesh.md`](Construct2D_to_SOD2D/linear_mesh.md) — extrusion, NMF remap, node aliasing, AoA classification, wall-spline fit, Gmsh/SOD2D export<br>[`high_order_mesh.md`](Construct2D_to_SOD2D/high_order_mesh.md) — arc-length wall placement, linear elasticity PDE, opposite-face-distance displacement (in progress) |
 | `Construct2D_to_NEKRS/` | [`linear_mesh.md`](Construct2D_to_NEKRS/linear_mesh.md) — Fischer's `smooth_geom0` algorithm, weighted-Laplace boundary blending, Nek5000 format-conversion chain<br>[`high_order_mesh.md`](Construct2D_to_NEKRS/high_order_mesh.md) — interpolating the 2D correction onto the real 3D mesh |
 | `pyHyp/` | [`pyHyp/README.md`](pyHyp/README.md) — surface coarsening, curvature-adaptive elliptic surface smoothing |
 | `etaGrid_to_SOD2D/` | [`etaGrid_to_SOD2D/README.md`](etaGrid_to_SOD2D/README.md) — sweep geometry, Vinokur stretching, wake growth series, boundary classification, wavy-wall tent function |

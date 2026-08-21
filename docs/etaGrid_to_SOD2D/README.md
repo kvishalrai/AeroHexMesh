@@ -269,6 +269,30 @@ that a simple corner-volume sign check misses) *before* submitting the
 order-elevation/conversion job — `check_raw_quality.py` does this via
 `gmsh.model.mesh.getElementQualities(tags, "minSICN")`.
 
+### 6.1 `uns_per_links` must always be `True` for this pipeline
+
+`tool_meshConversorPar`'s periodic-face node matching has two modes,
+selected by the `uns_per_links` flag in its own `input.json`: a fast
+structured-mesh path (assumes periodic node pairs line up by simple
+index correspondence) and a slower unstructured "Pseudo-Periodic
+Elements" search (matches periodic faces geometrically, node by node).
+`run_pipeline.py` originally hardcoded `uns_per_links: False`, which
+crashed outright on a genuinely unstructured cross-section (this
+pipeline's whole premise — quad, but not index-regular):
+
+```
+Error in generate_masSlaRankPar(..)! ...
+Is your mesh unstuctured and periodic? Activate flag uns_per_links!
+```
+
+Went unnoticed on smaller/simpler test cross-sections (structured
+enough by coincidence to pass either path) and only surfaced on a
+larger, genuinely-unstructured cross-section
+(`airfoil_vish.msh` — 883,935 nodes, 3,392 pseudo-periodic elements
+once matched correctly). Fixed by making `uns_per_links: True`
+unconditional in `run_pipeline.py`, since this pipeline's cross-sections
+are never index-regular by design — not a per-mesh setting to tune.
+
 ## 7. Wall-spline smoothing (`elasticity_run/`)
 
 Order elevation places new high-order wall nodes by **straight-line**

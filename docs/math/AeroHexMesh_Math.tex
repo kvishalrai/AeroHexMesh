@@ -200,6 +200,89 @@ element), the solver reverts and performs a small grid search over
 \((E,\nu)\) (coarse 2-point, then finer 9-point), re-solving each time
 and keeping whichever combination maximizes \(\min Q\).
 
+\subsection{Opposite-face-distance displacement (\texttt{opposite\_face\_disp\_factor}, in progress)}
+\label{sec:opposite-face}
+A second, independent displacement mode: each wall node is displaced by
+an integer multiple of the distance to its own \emph{opposite-face
+node} -- the node directly across the same hex element, found by
+\texttt{mod\_wall\_model.f90}'s \texttt{evalEXAtFace} (the same routine
+SOD2D's LES wall models use for exchange-distance evaluation, reused
+verbatim, not reimplemented):
+\begin{equation}
+\vecb{u}_{\text{buffer}} = \lambda_{\text{scale}} \cdot n_{\text{factor}} \cdot L \cdot \hat{\vecb{n}},
+\end{equation}
+where \(L\) is the through-element distance to the opposite-face node,
+\(\hat{\vecb{n}}\) its inward (into-the-fluid) normal, \(n_{\text{factor}}
+= \texttt{opposite\_face\_disp\_factor}\) (integer), and
+\(\lambda_{\text{scale}}\) reuses the same substep-damping factor as
+Section~\ref{sec:parametric-placement}'s parametric placement.
+
+\paragraph{Known limitation (not yet usable at \(n_{\text{factor}}=1\)).}
+The automatic \((E,\nu)\) fallback search above exhausts without finding
+\(\min Q \geq 10^{-6}\) on every mesh tested (a periodic NACA0012
+C-grid-like mesh, a Construct2D O-grid mesh, and a fully 3D M6 wing mesh
+with no periodicity and a blunt trailing edge) -- not specific to one
+mesh topology.
+
+\paragraph{Diagnostic sequence.} Four candidate mechanisms were tested
+directly against dumped data, in order, before the actual cause was
+found:
+\begin{enumerate}
+\item \emph{Simple normal-gap closure.} Refuted: dumping each wall
+  node's own position alongside its opposite-face node's position,
+  before and after the elasticity solve, shows the interior node
+  follows the wall almost exactly (median displacement-magnitude ratio
+  \(0.998\), median direction cosine \(1.0000\)); the gap barely
+  changes for most nodes (median \(1.7128\times10^{-3} \to
+  1.7092\times10^{-3}\)).
+\item \emph{In-plane (streamwise) shear} between neighboring wall
+  stations. Refuted: the signed area of the quadrilateral
+  (wall\(_1\), wall\(_2\), opp\(_2\), opp\(_1\)) for every nearest-
+  neighbor wall-node pair, before vs.\ after -- 0 of 6604 sampled quads
+  flipped sign or went near-zero; worst shrink ratio \(0.57\).
+\item \emph{Spanwise (Z) variation} of the imposed field. Refuted, and
+  confirmed \emph{correct} instead: magnitude spread across z-stations
+  at matching \((x,y)\) was exactly \(0.0000\times10^{0}\), direction
+  spread \(3.3\times10^{-16}\) -- perfectly z-invariant, as required.
+\item Only then: directly locating the failing element(s), by dumping
+  \texttt{computeQuality}'s per-element \texttt{quality(:)} and
+  per-Gauss-point \texttt{quality\_pv} (reused via \texttt{mu\_e(:,:)})
+  for elements below a threshold.
+\end{enumerate}
+
+\paragraph{The two failure signatures found.}
+\begin{itemize}
+\item \textbf{Trailing-edge tangent degeneracy} (NACA0012 meshes):
+  exactly \textbf{12 elements}, all with quality and \texttt{mu\_e}
+  exactly \(0\), all wall-touching, clustered at \(x\approx1.0,
+  y\approx0\) (the TE, upper and lower surface, every spanwise
+  station). The imposed displacement at the TE tip node itself:
+  \((d_x,d_y,d_z)\approx(+1.71\times10^{-3}, -1.4\times10^{-7}, 0)\) --
+  almost \emph{purely tangential} (downstream), not into the fluid at
+  all. A sharp/near-sharp TE has no well-defined surface normal, so
+  \(\hat{\vecb{n}}\) degenerates toward the local element's chordwise
+  axis there instead of a true perpendicular, shearing an already
+  acutely-angled element along its own edge until its Jacobian
+  inverts, regardless of \((E,\nu)\) -- a \emph{direction} problem, not
+  a magnitude one.
+\item \textbf{Wing-root band collapse} (M6 wing mesh, no periodicity,
+  blunt TE -- a genuinely different case): \textbf{88} exactly-zero-
+  quality elements, all in the single row of wall elements closest to
+  the root symmetry plane (\(z\approx0.0091\)--\(0.0101\)), spanning
+  almost the \emph{entire chord} (\(x=0.005\) to \(x\approx0.81\)), not
+  one corner. The individual displacement vectors there look
+  geometrically sane in isolation (magnitude \(\sim7\times10^{-5}\),
+  \(d_z\) exactly \(0\), direction transitioning smoothly from
+  \(-x\)-dominant near the LE to \(y\)-dominant mid-chord) -- a locally
+  sane vector field that still collapses the whole row it acts on.
+  \textbf{Not yet root-caused.}
+\end{itemize}
+Substepping (smaller \(\lambda_{\text{scale}}\), more substeps) does
+not fix either failure -- confirmed by running the fallback search on a
+single substep at \(\lambda_{\text{scale}}=0.3\), which still fails
+identically. Expected for the TE case: a magnitude reduction cannot fix
+a displacement pointed the wrong way.
+
 %=====================================================================
 \section{\texttt{Construct2D\_to\_NEKRS/linear\_mesh/}}
 \label{sec:c2n-linear}

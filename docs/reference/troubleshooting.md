@@ -78,6 +78,27 @@ bug from a real-mesh quality issue).
 See [`cluster-setup.md`](cluster-setup.md#login-node-resource-limits) —
 always submit real work via SLURM, use `python3 -u` when backgrounding.
 
+## `evalEXAtFace`/`mod_wall_model.f90`: `connecParWork` corrupts one-off geometric queries on periodic meshes
+
+`connecParWork` substitutes each periodic slave node's id with its
+master's id (needed for DOF-consistent solver assembly, e.g.
+`mod_fem_precond.f90`'s `lMaster`) — but any call that just wants a
+node's *true* coordinates (a geometric query, not an assembly) should use
+`connecParOrig` instead. Passing `connecParWork` to a routine like
+`evalEXAtFace` for that purpose silently returns coordinates from the
+wrong end of the periodic domain for nodes near the periodic boundary.
+See [`Construct2D_to_SOD2D/high_order_mesh.md`](../Construct2D_to_SOD2D/high_order_mesh.md#3-opposite-face-distance-displacement-opposite_face_disp_factor-in-progress--not-yet-usable)
+for how this was diagnosed (exactly the periodic-face wall nodes got a
+displacement magnitude equal to the full periodic span).
+
+## `opposite_face_disp_factor`: fails at `factor=1` on every mesh tried so far
+
+Not yet a usable feature — the elasticity solve's own quality-fallback
+search exhaustively fails on trailing-edge and wing-root-symmetry
+regions regardless of mesh topology or `(E,ν)`. See
+[`Construct2D_to_SOD2D/high_order_mesh.md` §3.1](../Construct2D_to_SOD2D/high_order_mesh.md#31-known-limitation-fails-on-the-walls-own-geometric-singularities)
+before spending time re-diagnosing the same failure from scratch.
+
 ## Raw-mesh quality: always check `minSICN` before order-elevating
 
 Standing process rule in `etaGrid_to_SOD2D/` (and good practice
