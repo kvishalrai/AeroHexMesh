@@ -312,6 +312,8 @@ subroutine write_options_file(iunit, options)
   write(iunit,*) ' fdst = ', options%fdst
   write(iunit,*) ' fwkl = ', options%fwkl
   write(iunit,*) ' fwki = ', options%fwki
+  write(iunit,*) ' nwki = ', options%nwki
+  write(iunit,*) ' rtef = ', options%rtef
   write(iunit,'(A)') '/'
 
 ! Volume grid options
