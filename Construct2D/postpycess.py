@@ -77,27 +77,37 @@ def main():
         f.close
         fchecks += [True]
 
-#   Read grid data
-    imax, jmax, kmax, x, y, threed = read_grid(gridfile)
+#   Read grid data (list of one dict per block; multi-block p3d files --
+#   e.g. a 2-block XCUT-pipeline mesh -- come back as more than one entry)
+    blocks = read_grid(gridfile)
+    nblk = len(blocks)
+    if nblk > 1:
+      print(str(nblk) + '-block grid')
 
-#   Read function files, storing categories, variable names, values, mins, maxes
+#   Read function files, storing categories, variable names, values, mins, maxes.
+#   block_values[bidx] holds the (nvars,imax_b,jmax_b) array for every
+#   block a datafile actually covers -- a single-block stats file (e.g. an
+#   older run, or Construct2D's own output alone) only ever covers block 1,
+#   in which case later blocks are simply left uncolored when plotting.
     counter = 0
     catglist = []
     varlist = []
+    block_values = []
     for i in range(0, len(datafiles)):
       if fchecks[i]:
-        tmpcatg, tmpvars, tmpvals, tmpmins, tmpmaxes = \
-                         read_function_file(datafiles[i], imax, jmax, 
-                                            kmax, threed)
+        tmpcatg, tmpvars, tmpblockvals, tmpmins, tmpmaxes = \
+                         read_function_file(datafiles[i])
         tmpnvars = len(tmpvars)
         catglist += [tmpcatg]*tmpnvars
         varlist += tmpvars
         if i == 0:
-          values = tmpvals
+          block_values = tmpblockvals
           minvals = tmpmins
           maxvals = tmpmaxes
         else:
-          values = np.concatenate((values, tmpvals))
+          ncov = min(len(block_values), len(tmpblockvals))
+          for bidx in range(0, ncov):
+            block_values[bidx] = np.concatenate((block_values[bidx], tmpblockvals[bidx]))
           minvals = np.concatenate((minvals, tmpmins))
           maxvals = np.concatenate((maxvals, tmpmaxes))
     print('')
@@ -160,9 +170,9 @@ def main():
           if plotnum == '1':
             validvar = True
             varname = None
-            plotvar = None
+            plotvar_blocks = None
             minvar = None
-            maxvar = None 
+            maxvar = None
           elif plotnum == 'Q' or plotnum == 'q':
             validvar = False
             plotdone = True
@@ -170,14 +180,14 @@ def main():
             validvar = True
             varnum = int(plotnum) - 2
             varname = varlist[varnum]
-            plotvar = values[varnum,:,:]
+            plotvar_blocks = [bv[varnum,:,:] for bv in block_values]
             minvar = minvals[varnum]
             maxvar = maxvals[varnum]
           else:
             validvar = False
             plotdone = False
             print('Error: plotting variable ' + plotnum + ' not recognized.\n')
-  
+
 #         Create the plot
           if (validvar):
             if varname != None:
@@ -185,17 +195,18 @@ def main():
               print('Min ' + varname + ': ' + str(minvar))
               print('')
             if plottype == 'grid':
-              plot_grid(x, y, colormap, plaincolor, 
-                        varname, plotvar, minvar, maxvar)
+              plot_grid(blocks, colormap, plaincolor,
+                        varname, plotvar_blocks, minvar, maxvar)
             elif plottype == 'contour':
-              plot_contours(x, y, colormap, plaincolor, contlevels, 
-                            varname, plotvar, minvar, maxvar)
+              plot_contours(blocks, colormap, plaincolor, contlevels,
+                            varname, plotvar_blocks, minvar, maxvar)
             elif plottype == 'surface':
-              if varname == None:
+              if varname == None or not plotvar_blocks:
                 passedvar = None
               else:
-                passedvar = plotvar[:,0]
-              plot_surface(x[:,0], y[:,0], plaincolor, topcolor, botcolor,
+                passedvar = plotvar_blocks[0][:,0]
+              plot_surface(blocks[0]['x'][:,0], blocks[0]['y'][:,0],
+                           plaincolor, topcolor, botcolor,
                            varname, passedvar)
 
       else:
@@ -237,7 +248,12 @@ def pyviz_init():
 
 ################################################################################
 #
-# Function to read grid
+# Function to read grid. Returns a LIST of blocks (one dict per block, each
+# with keys imax, jmax, kmax, x, y, threed) so that both ordinary
+# single-block grids and multi-block grids (e.g. a 2-block XCUT-pipeline
+# mesh: main C-grid block + TE gap-filler block) come back through the
+# same interface -- callers that only care about the first/only block just
+# use blocks[0].
 #
 ################################################################################
 def read_grid(fname):
@@ -245,26 +261,43 @@ def read_grid(fname):
 # Open grid file
   f = open(fname)
 
-# Read imax, jmax
-# 3D grid specifies number of blocks on top line
+# First line is either "imax jmax" (an ordinary single-block 2D grid), or
+# a single integer that is either a block count (this project's
+# multi-block 2D format, one "imax jmax" line per block) or -- in the
+# legacy single-zone 3D case handled below -- a "number of blocks" line
+# that in practice is always followed by exactly one "imax kmax jmax"
+# dims line.
   line1 = f.readline()
-  flag = len(line1.split())
-  if flag == 1:
-    threed = True
-  else:
-    threed = False
+  tokens = line1.split()
 
-  if threed:
-    line1 = f.readline()
-    imax, kmax, jmax = [int(x) for x in line1.split()]
-  else:
-    imax, jmax = [int(x) for x in line1.split()]
+  if len(tokens) == 2:
+#   Ordinary single-block 2D grid, no block-count line
+    imax, jmax = [int(v) for v in tokens]
     kmax = 1
+    x = np.zeros((imax,jmax))
+    y = np.zeros((imax,jmax))
+    for j in range(0, jmax):
+      for i in range(0, imax):
+        x[i,j] = float(f.readline())
+    for j in range(0, jmax):
+      for i in range(0, imax):
+        y[i,j] = float(f.readline())
+    f.close
+    print('Successfully read grid file '+ fname)
+    return [dict(imax=imax, jmax=jmax, kmax=kmax, x=x, y=y, threed=False)]
 
-# Read geometry data
-  x = np.zeros((imax,jmax))
-  y = np.zeros((imax,jmax))
-  if threed:
+# One-token first line: figure out whether it's a legacy single 3D block
+# or this project's multi-block 2D format by peeking at the next line.
+  nblk = int(tokens[0])
+  dimline = f.readline()
+  dimtokens = dimline.split()
+
+  if nblk == 1 and len(dimtokens) == 3:
+#   Legacy single 3D block ("1" then "imax kmax jmax", then x, a skipped
+#   array, then y) -- unchanged from the original single-block behavior.
+    imax, kmax, jmax = [int(v) for v in dimtokens]
+    x = np.zeros((imax,jmax))
+    y = np.zeros((imax,jmax))
     for j in range(0, jmax):
       for k in range(0, kmax):
         for i in range(0, imax):
@@ -277,29 +310,58 @@ def read_grid(fname):
       for k in range(0, kmax):
         for i in range(0, imax):
           y[i,j] = float(f.readline())
-  else:
-    for j in range(0, jmax):
-      for i in range(0, imax):
-        x[i,j] = float(f.readline())
+    f.close
+    print('Successfully read grid file '+ fname)
+    return [dict(imax=imax, jmax=jmax, kmax=kmax, x=x, y=y, threed=True)]
 
-    for j in range(0, jmax):
-      for i in range(0, imax):
-        y[i,j] = float(f.readline())
+# Multi-block 2D grid: nblk "imax jmax" lines (the first one already read
+# above as dimline), then all blocks' data concatenated block-by-block
+# (each block's full x array, then its full y array, matching the
+# xcut_pipeline's write_p3d_multiblock convention).
+  dims = [(int(dimtokens[0]), int(dimtokens[1]))]
+  for _ in range(nblk - 1):
+    dims.append(tuple(int(v) for v in f.readline().split()))
+
+  blocks = []
+  for bimax, bjmax in dims:
+    bx = np.zeros((bimax,bjmax))
+    by = np.zeros((bimax,bjmax))
+    for j in range(0, bjmax):
+      for i in range(0, bimax):
+        bx[i,j] = float(f.readline())
+    for j in range(0, bjmax):
+      for i in range(0, bimax):
+        by[i,j] = float(f.readline())
+    blocks.append(dict(imax=bimax, jmax=bjmax, kmax=1, x=bx, y=by, threed=False))
 
 # Print message
-  print('Successfully read grid file '+ fname)
+  print('Successfully read grid file '+ fname + ' (' + str(nblk) +
+        ' block' + ('s' if nblk != 1 else '') + ')')
 
 # Close the file
   f.close
 
-  return (imax, jmax, kmax, x, y, threed)
+  return blocks
 
 ################################################################################
 #
-# Function to read Plot3D function file
+# Function to read Plot3D function file. Self-describing, single- or
+# multi-block: the dims line right after the variable-name line is either
+# "imax jmax kmax nvar" (ordinary single-block Construct2D *_stats.p3d),
+# or a lone block-count integer followed by that many "imax jmax kmax
+# nvar" lines (this project's own multi-block quality-stats convention,
+# e.g. a 2-block XCUT-pipeline mesh with one block's stats from
+# Construct2D and the other's computed by the pipeline itself). Returns
+# (varcat, variables, block_values, mins, maxes) where block_values is a
+# list -- one entry per block COVERED by this file, in block order -- of
+# (nvars, imax_b, jmax_b) arrays; a file may cover fewer blocks than the
+# grid has (e.g. an old-style stats file matching only the main mesh
+# block), in which case later blocks simply have no entry here. mins/
+# maxes are per-variable extrema across every covered block, for one
+# shared color scale spanning all of them.
 #
 ################################################################################
-def read_function_file(fname, imax, jmax, kmax, threed):
+def read_function_file(fname):
 
 # Open stats file
   f = open(fname)
@@ -316,39 +378,45 @@ def read_function_file(fname, imax, jmax, kmax, threed):
 # Number of variables
   nvars = len(variables)
 
-# Initialize data and skip the next line
-  values = np.zeros((nvars,imax,jmax))
-  maxes = np.zeros((nvars))*-1000.0
-  mins = np.ones((nvars))*1000.0
-  line1 = f.readline()
+# Dims line: either "imax jmax kmax nvar" (single block) or a lone
+# block-count integer followed by that many such lines (multi-block)
+  dimtokens = f.readline().split()
+  if len(dimtokens) == 1:
+    nblk = int(dimtokens[0])
+    dims = []
+    for _ in range(nblk):
+      di = f.readline().split()
+      dims.append((int(di[0]), int(di[1]), int(di[2])))
+  else:
+    imax, jmax, kmax, _nvar = [int(v) for v in dimtokens]
+    dims = [(imax, jmax, kmax)]
 
-# Read grid stats data, storing min and max
-  for n in range(0, nvars):
-    if (threed):
-      for j in range(0, jmax):
-        for k in range(0, kmax):
-          for i in range(0, imax):
-            values[n,i,j] = float(f.readline())
-            if values[n,i,j] > maxes[n]:
-              maxes[n] = values[n,i,j]
-            if values[n,i,j] < mins[n]:
-              mins[n] = values[n,i,j]
-    else:
-      for j in range(0, jmax):
-        for i in range(0, imax):
-          values[n,i,j] = float(f.readline())
-          if values[n,i,j] > maxes[n]:
-            maxes[n] = values[n,i,j]
-          if values[n,i,j] < mins[n]:
-            mins[n] = values[n,i,j]
+  maxes = np.ones(nvars) * -1.0e300
+  mins = np.ones(nvars) * 1.0e300
+  block_values = []
+
+  for (bimax, bjmax, bkmax) in dims:
+    values = np.zeros((nvars,bimax,bjmax))
+    for n in range(0, nvars):
+      for j in range(0, bjmax):
+        for k in range(0, bkmax):
+          for i in range(0, bimax):
+            v = float(f.readline())
+            values[n,i,j] = v
+            if v > maxes[n]:
+              maxes[n] = v
+            if v < mins[n]:
+              mins[n] = v
+    block_values += [values]
 
 # Print message
-  print('Successfully read data file ' + fname)
+  print('Successfully read data file ' + fname +
+        (' (' + str(len(dims)) + ' block(s))' if len(dims) > 1 else ''))
 
 # Close the file
   f.close
 
-  return (varcat, variables, values, mins, maxes)
+  return (varcat, variables, block_values, mins, maxes)
   
 ################################################################################
 #
@@ -558,10 +626,16 @@ def faux_colorbar(minvar, maxvar, varname, colormap):
 
 ################################################################################
 #
-# Function to plot colored or plain grid
+# Function to plot colored or plain grid. `blocks` is a list of one dict
+# per block (as returned by read_grid) -- every block is drawn on the same
+# axes. `var`, when a plotting variable is selected, is a list of one 2D
+# array per block COVERED by the stats data (as returned by
+# read_function_file) -- usually just block 1, but every block covered
+# gets colored by its own data; any block beyond that list is always
+# drawn in plaincolor.
 #
 ################################################################################
-def plot_grid(x, y, colormap=None, plaincolor=None,
+def plot_grid(blocks, colormap=None, plaincolor=None,
               varname=None, var=None, minvar=None, maxvar=None):
 
 # colormap and plaincolor are optional - set defaults
@@ -578,10 +652,6 @@ def plot_grid(x, y, colormap=None, plaincolor=None,
     print('Plotting grid colored by ' + varname + ' ...\n')
     colorplot = True
 
-# Determine grid dimensions
-  imax = x.shape[0]
-  jmax = x.shape[1]
-
 # Initialize plot
   fig = plt.figure()
   ax = fig.add_subplot(111)
@@ -589,24 +659,32 @@ def plot_grid(x, y, colormap=None, plaincolor=None,
 # See http://wiki.scipy.org/Cookbook/Matplotlib/MulticoloredLine
 # LineCollection type allows color to vary along the line according
 #   to a parameter.
-  for j in range(0, jmax):
-    segments = line_to_segments(x[:,j], y[:,j])
-    if colorplot:
-      lc = LineCollection(segments, cmap=plt.get_cmap(colormap),
-           norm=plt.Normalize(minvar, maxvar))
-      lc.set_array(var[:,j])
-    else:
-      lc = LineCollection(segments, colors=plaincolor)
-    ax.add_collection(lc)
-  for i in range(0, imax):
-    segments = line_to_segments(x[i,:], y[i,:])
-    if colorplot:
-      lc = LineCollection(segments, cmap=plt.get_cmap(colormap),
-           norm=plt.Normalize(minvar, maxvar))
-      lc.set_array(var[i,:])
-    else:
-      lc = LineCollection(segments, colors=plaincolor)
-    ax.add_collection(lc)
+  for bidx, blk in enumerate(blocks):
+    bx = blk['x']
+    by = blk['y']
+    bimax = bx.shape[0]
+    bjmax = bx.shape[1]
+    blockcolor = colorplot and var is not None and bidx < len(var)
+    bvar = var[bidx] if blockcolor else None
+
+    for j in range(0, bjmax):
+      segments = line_to_segments(bx[:,j], by[:,j])
+      if blockcolor:
+        lc = LineCollection(segments, cmap=plt.get_cmap(colormap),
+             norm=plt.Normalize(minvar, maxvar))
+        lc.set_array(bvar[:,j])
+      else:
+        lc = LineCollection(segments, colors=plaincolor)
+      ax.add_collection(lc)
+    for i in range(0, bimax):
+      segments = line_to_segments(bx[i,:], by[i,:])
+      if blockcolor:
+        lc = LineCollection(segments, cmap=plt.get_cmap(colormap),
+             norm=plt.Normalize(minvar, maxvar))
+        lc.set_array(bvar[i,:])
+      else:
+        lc = LineCollection(segments, colors=plaincolor)
+      ax.add_collection(lc)
 
 # Create colorbar and title
   if colorplot:
@@ -614,12 +692,15 @@ def plot_grid(x, y, colormap=None, plaincolor=None,
     title = 'Grid geometry colored by ' + varname
   else:
     title = 'Grid geometry'
+  if len(blocks) > 1:
+    title += ' (' + str(len(blocks)) + ' blocks)'
 
 # Show plot
   plt.title(title)
   plt.xlabel('x')
   plt.ylabel('y')
   plt.axis('equal')
+  ax.autoscale_view()
   #plt.show(block=False)
   plt.show()
 
@@ -739,10 +820,15 @@ def interpolate_contours(x, y, xi, eta, CS, minval, maxval, colormap):
 
 ################################################################################
 #
-# Driver function to plot contours
+# Driver function to plot contours. `blocks` is a list of one dict per
+# block (as returned by read_grid). `var`, when a plotting variable is
+# selected, is a list of one 2D array per block COVERED by the stats data
+# (as returned by read_function_file) -- the contour interpolation (only
+# meaningful in a block's own rectangular xi-eta space) is done for every
+# covered block; any block beyond that list is drawn as a plain outline.
 #
 ################################################################################
-def plot_contours(x, y, colormap=None, plaincolor=None, nlevels=None, 
+def plot_contours(blocks, colormap=None, plaincolor=None, nlevels=None,
                   varname=None, var=None, minvar=None, maxvar=None):
 
 # optional settings - set defaults
@@ -761,45 +847,55 @@ def plot_contours(x, y, colormap=None, plaincolor=None, nlevels=None,
     print('Plotting contours of ' + varname + ' ...\n')
     contourplot = True
 
-  imax = x.shape[0]
-  jmax = x.shape[1]
+# fig is the one persistent, visible figure everything gets drawn onto;
+# a per-block contour computation below uses its own disposable scratch
+# figure so that clearing it (to discard the rectangular xi-eta contour
+# lines once mapped into x-y space) never wipes out any other block
+# already drawn on fig.
+  fig = plt.figure()
+  ncov = len(var) if (contourplot and var is not None) else 0
 
-# Do the following only if a plotting variable is actually supplied
+  for bidx, blk in enumerate(blocks):
+    bx = blk['x']
+    by = blk['y']
+    bimax = bx.shape[0]
+    bjmax = bx.shape[1]
+
+    if contourplot and bidx < ncov:
+
+#     Create contours in xi-eta space, since it is rectangular, on a
+#     scratch figure that's discarded once its vertices are extracted
+      xilev = np.arange(1.0, float(bimax+1), 1.0)
+      etalev = np.arange(1.0, float(bjmax+1), 1.0)
+      xi, eta = np.meshgrid(xilev, etalev)
+      xi = np.transpose(xi)
+      eta = np.transpose(eta)
+
+      scratch = plt.figure()
+      CS = plt.contour(xi, eta, var[bidx], nlevels)
+      plt.close(scratch)
+
+#     Interpolate contours to x-y space and plot manually, onto fig
+      plt.figure(fig.number)
+      interpolate_contours(bx, by, xi, eta, CS, minvar, maxvar, colormap)
+
+    else:
+      plt.figure(fig.number)
+      plt.plot(bx[:,0], by[:,0], color=plaincolor)
+      plt.plot(bx[:,bjmax-1], by[:,bjmax-1], color=plaincolor)
+      plt.plot(bx[0,:], by[0,:], color=plaincolor)
+      plt.plot(bx[bimax-1,:], by[bimax-1,:], color=plaincolor)
+
+  plt.figure(fig.number)
   if contourplot:
-
-#   Initially, create contours in xi-eta space, since it is rectangular
-    xilev = np.arange(1.0, float(imax+1), 1.0)
-    etalev = np.arange(1.0, float(jmax+1), 1.0)
-    xi, eta = np.meshgrid(xilev, etalev)
-
-    xi = np.transpose(xi)
-    eta = np.transpose(eta)
-
-    plt.figure()
-    CS = plt.contour(xi, eta, var, nlevels)
-    
-#   Remove rectangular grid contours
-    plt.clf()
-
-#   Interpolate contours to x-y space and plot manually
-    interpolate_contours(x, y, xi, eta, CS, minvar, maxvar, colormap)
-
 #   Create colorbar for plot
     faux_colorbar(minvar, maxvar, varname, colormap)
-
-#   Set title
     title = 'Contours of ' + varname
-
   else:
-
-#   Set title
     title = 'Grid boundaries'
 
-# Add grid boundaries to plot
-  plt.plot(x[:,0], y[:,0], color=plaincolor)
-  plt.plot(x[:,jmax-1], y[:,jmax-1], color=plaincolor)
-  plt.plot(x[0,:], y[0,:], color=plaincolor)
-  plt.plot(x[imax-1,:], y[imax-1,:], color=plaincolor)
+  if len(blocks) > 1:
+    title += ' (' + str(len(blocks)) + ' blocks)'
 
 # Show plot
   plt.title(title)

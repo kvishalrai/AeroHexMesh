@@ -1,0 +1,15 @@
+{
+  "stage": "step1",
+  "airfoil_source": "sample_airfoils/oat15_slc.dat",
+  "lfar": 20.0,
+  "nwake": 50,
+  "wake_type": "spline",
+  "pull_length": 1.0,
+  "n_af": 478,
+  "h": 0.0024982,
+  "d0": 0.001618719695771459,
+  "n_total": 578,
+  "i_bot_te_raw": 51,
+  "i_top_te_raw": 528,
+  "curve_path": "sample_airfoils/oat15_slc_xcut_spline_v2.dat"
+}
