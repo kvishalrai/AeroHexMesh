@@ -41,12 +41,12 @@ subroutine set_defaults(options, surf, filename)
   character input
 
   integer nsrf, tept, jmax, nwke, stp1, stp2, nrmt, nrmb, gdim, npln, asmt
-  double precision lesp, tesp, radi, ypls, recd, fdst, fwkl, fwki, dpln, alfa, &
-                   epsi, epse, funi, uni, cfrc
+  double precision lesp, tesp, radi, ypls, recd, fdst, fwkl, fwki, nwki,      &
+                   rtef, dpln, alfa, epsi, epse, funi, uni, cfrc
   logical f3dm
   character(300) :: name
   character(4) :: topo, slvr
-  namelist /SOPT/ nsrf, lesp, tesp, radi, nwke, fdst, fwkl, fwki
+  namelist /SOPT/ nsrf, lesp, tesp, radi, nwke, fdst, fwkl, fwki, nwki, rtef
   namelist /VOPT/ name, jmax, slvr, topo, ypls, recd, stp1, stp2, nrmt, nrmb,  &
                   alfa, epsi, epse, funi, asmt, cfrc
   namelist /OOPT/ gdim, npln, dpln, f3dm
@@ -62,6 +62,8 @@ subroutine set_defaults(options, surf, filename)
   fdst = 1.d0
   fwkl = 1.d0
   fwki = 10.d0
+  nwki = 1.d0
+  rtef = 0.d0
   name = options%project_name
   jmax = 100
   slvr = 'HYPR'
@@ -128,6 +130,8 @@ subroutine set_defaults(options, surf, filename)
   options%fdst = fdst
   options%fwkl = fwkl
   options%fwki = fwki
+  options%nwki = nwki
+  options%rtef = rtef
   options%yplus = ypls
   options%Re = recd
   options%cfrac = cfrc
@@ -316,7 +320,7 @@ subroutine run_command(command, surf, options, done, ioerror)
   Use vardef,       only : airfoil_surface_type, options_type
   Use util,         only : read_airfoil_name, read_airfoil_size, read_airfoil, &
                            write_options
-  Use edge_grid,    only : transform_airfoil
+  Use edge_grid,    only : transform_airfoil, round_te_corners
   Use surface_grid, only : create_grid
 
   character(4), intent(in) :: command
@@ -442,6 +446,14 @@ subroutine run_command(command, surf, options, done, ioerror)
 
           call transform_airfoil(newsurf%x, newsurf%y)
 
+!         Locally round sharp TE corners if requested (closed-loop airfoils
+!         only -- a real TE gap is already handled by fillet_trailing_edge)
+
+          if (.not. newsurf%tegap .and. options%rtef > 0.d0) then
+            call round_te_corners(newsurf, options%rtef)
+            options%nsrf = newsurf%npoints
+          end if
+
 !         Set number of points in i direction
 
           if (options%topology == 'OGRD') then
@@ -474,6 +486,27 @@ subroutine run_command(command, surf, options, done, ioerror)
             options%nsrf = surf%npoints
           end if
 
+!         Copy buffer airfoil to a disposable working copy -- rounding, if
+!         requested below, must not permanently modify the persistent
+!         buffer airfoil (surf), or repeated GRID commands would re-round
+!         an already-rounded corner
+
+          newsurf%tegap = surf%tegap
+          newsurf%npoints = surf%npoints
+          allocate(newsurf%x(newsurf%npoints))
+          allocate(newsurf%y(newsurf%npoints))
+          newsurf%x = surf%x
+          newsurf%y = surf%y
+
+!         Locally round sharp TE corners if requested (closed-loop airfoils
+!         only; surf%tegap is already forced .false. above, else we would
+!         have stopped)
+
+          if (options%rtef > 0.d0) then
+            call round_te_corners(newsurf, options%rtef)
+            options%nsrf = newsurf%npoints
+          end if
+
 !         Set number of points in i direction
 
           if (options%topology == 'OGRD') then
@@ -484,7 +517,10 @@ subroutine run_command(command, surf, options, done, ioerror)
 
 !         Create surface grid
 
-          call create_grid(surf, options, .false.)
+          call create_grid(newsurf, options, .false.)
+
+          deallocate(newsurf%x)
+          deallocate(newsurf%y)
 
         end if
       end if
@@ -675,7 +711,8 @@ subroutine hyperbolic_surface_options(opt, soptdone)
 ! Print out options
 
   write(*,*) 'Airfoil surface grid options for hyperbolic solver:'
-  write(*,1005) opt%nsrfdefault, opt%lesp, opt%tesp, opt%radi, opt%nwake
+  write(*,1005) opt%nsrfdefault, opt%lesp, opt%tesp, opt%radi, opt%nwake,      &
+                opt%fdst, opt%fwkl, opt%fwki, opt%nwki, opt%rtef
 
 ! Read user input
 
@@ -730,6 +767,56 @@ subroutine hyperbolic_surface_options(opt, soptdone)
       read(*,*) opt%nwake
       write(*,*)
 
+    case ('FDST', 'Fdst', 'fdst')
+
+      write(*,*)
+      write(*,*) 'Current O-grid farfield spacing parameter:  ', opt%fdst
+      write(*,1007)
+      read(*,*) opt%fdst
+      write(*,*)
+
+    case ('FWKL', 'Fwkl', 'fwkl')
+
+      write(*,*)
+      write(*,*) 'Current C-grid farfield wake length ratio:  ', opt%fwkl
+      write(*,1007)
+      read(*,*) opt%fwkl
+      write(*,*)
+      if (opt%fwkl > 1.d0) opt%fwkl = 1.d0
+
+    case ('FWKI', 'Fwki', 'fwki')
+
+      write(*,*)
+      write(*,*) 'Current C-grid farfield wake initial length ratio:  ',       &
+                 opt%fwki
+      write(*,1007)
+      read(*,*) opt%fwki
+      write(*,*)
+      if (opt%fwki < 1.d0) opt%fwki = 1.d0
+
+    case ('NWKI', 'Nwki', 'nwki')
+
+      write(*,*)
+      write(*,*) 'Current C-grid initial (near-wall) wake spacing ratio ' //   &
+                 'to TESP:  ', opt%nwki
+      write(*,1007)
+      read(*,*) opt%nwki
+      write(*,*)
+
+    case ('RTEF', 'Rtef', 'rtef')
+
+      write(*,*)
+      write(*,*) 'Current trailing edge corner rounding fraction ' //         &
+                 '(0 = off):  ', opt%rtef
+      write(*,*) 'Locally rounds the two sharp TE corners of a closed-loop'
+      write(*,*) 'airfoil surface (does not require a TE gap, does not'
+      write(*,*) 'rescale or re-panel the airfoil).'
+      write(*,1007)
+      read(*,*) opt%rtef
+      write(*,*)
+      if (opt%rtef < 0.d0) opt%rtef = 0.d0
+      if (opt%rtef >= 1.d0) opt%rtef = 0.99d0
+
     case ('QUIT', 'Quit', 'quit')
 
       soptdone = .true.
@@ -748,6 +835,14 @@ subroutine hyperbolic_surface_options(opt, soptdone)
              '  TESP  Trailing edge point spacing:  ', ES12.5 /                &
              '  RADI  Farfield radius:  ', F8.4 /                              &
              '  NWKE  Points along the wake for C-grid:  ', I5 /               &
+             '  ' /                                                            &
+             '  Advanced settings:' /                                         &
+             '  FDST  O-grid farfield spacing parameter:  ', F8.4 /            &
+             '  FWKL  C-grid farfield wake length ratio:  ', F8.4 /            &
+             '  FWKI  C-grid farfield wake initial length ratio:  ', F8.4 /    &
+             '  NWKI  C-grid initial wake spacing ratio to TESP:  ', F8.4 /    &
+             '  RTEF  Trailing edge corner rounding fraction (0=off):  ',      &
+             F8.4 /                                                            &
              '  ' /                                                            &
              '  Navigation:' /                                                 &
              '  QUIT  Leave airfoil surface grid options menu')

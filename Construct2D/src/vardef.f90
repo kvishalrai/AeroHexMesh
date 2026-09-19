@@ -55,6 +55,18 @@ module vardef
                                     !  field compared to actual wake
     double precision :: fwki        ! Ratio of initial wake spacing in far-
                                     !  field compared to actual wake
+    double precision :: nwki        ! Ratio of initial (near-wall) wake
+                                    !  spacing to trailing edge point
+                                    !  spacing, for C-grid. 1.0 reproduces
+                                    !  the original behavior (near-wall
+                                    !  initial wake spacing = tesp)
+    double precision :: rtef        ! Fraction of the shorter adjacent
+                                    !  segment used as the rounding radius
+                                    !  at the two sharp trailing edge
+                                    !  corners of a closed-loop (non-gap)
+                                    !  airfoil surface. 0.0 = off (default,
+                                    !  corners stay sharp, exactly as
+                                    !  loaded)
     double precision :: fdst        ! Farfield spacing parameter for O-
                                     !  grid. 1.0: uniform. > 1.0: clustered
                                     !  near trailing edge.

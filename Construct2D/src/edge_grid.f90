@@ -324,12 +324,15 @@ subroutine add_wake_points(grid, options)
   grid%x(grid%imax,1) = grid%x(1,1)
   grid%y(grid%imax,1) = grid%y(1,1)
 
-! Initial wake spacing set equal to trailing edge spacing
+! Initial wake spacing: trailing edge point spacing scaled by user-
+!   specified ratio options%nwki (nwki = 1.0 reproduces the original
+!   behavior of setting the initial wake spacing equal to the trailing
+!   edge spacing)
 
   srf1 = grid%surfbounds(1)
   srf2 = grid%surfbounds(2)
-  d0 = sqrt((grid%x(srf1+1,1) - grid%x(srf1,1))**2.d0 + (grid%y(srf1+1,1) -    &
-             grid%y(srf1,1))**2.d0)
+  d0 = options%nwki * sqrt((grid%x(srf1+1,1) - grid%x(srf1,1))**2.d0 +        &
+             (grid%y(srf1+1,1) - grid%y(srf1,1))**2.d0)
 
 ! Length of wake region and vector from TE to back of grid
 
@@ -361,6 +364,128 @@ subroutine add_wake_points(grid, options)
   end do
 
 end subroutine add_wake_points
+
+!=============================================================================80
+!
+! Subroutine to locally round the two sharp corners of a closed-loop airfoil
+! (i.e. an airfoil whose first and last points coincide, representing a
+! finite-thickness trailing edge closed via a phantom mid-TE point).
+!
+! Unlike fillet_trailing_edge, this does NOT require or create a true TE
+! gap, and does NOT re-panel or rescale the airfoil: it only replaces the
+! two corner vertices with a short, tangent-continuous blend built from
+! their immediate neighbors, so the change is confined to a small region
+! right at the two corners and is bounded by the original corner triangle
+! (it can never extend past the original geometry, so no chord rescale is
+! ever needed downstream).
+!
+!=============================================================================80
+subroutine round_te_corners(foil, frac)
+
+  Use vardef, only : airfoil_surface_type
+
+  type(airfoil_surface_type), intent(inout) :: foil
+  double precision, intent(in) :: frac
+
+  integer, parameter :: nptscorner = 9
+  type(airfoil_surface_type) :: tempfoil
+  double precision, dimension(nptscorner) :: lowx, lowy, upx, upy
+  integer :: npoints, newnpoints, nmid, i1, i2
+
+  if (frac <= 0.d0) return
+
+  npoints = foil%npoints
+
+! Round the lower corner (point 2), blended from its neighbors: point 1
+!   (the phantom TE tip) and point 3 (the next surface point)
+
+  call fillet_corner(foil%x(1), foil%y(1), foil%x(2), foil%y(2),               &
+                      foil%x(3), foil%y(3), frac, nptscorner, lowx, lowy)
+
+! Round the upper corner (point npoints-1), blended from its neighbors:
+!   point npoints-2 (the previous surface point) and point npoints (the
+!   phantom TE tip, same location as point 1)
+
+  call fillet_corner(foil%x(npoints-2), foil%y(npoints-2),                     &
+                      foil%x(npoints-1), foil%y(npoints-1),                    &
+                      foil%x(npoints), foil%y(npoints), frac, nptscorner,      &
+                      upx, upy)
+
+! Assemble new point array: tip + lower blend + unchanged middle points +
+!   upper blend + tip (closing the loop again)
+
+  newnpoints = npoints - 4 + 2*nptscorner
+  allocate(tempfoil%x(newnpoints))
+  allocate(tempfoil%y(newnpoints))
+
+  tempfoil%x(1) = foil%x(1)
+  tempfoil%y(1) = foil%y(1)
+
+  tempfoil%x(2:nptscorner+1) = lowx
+  tempfoil%y(2:nptscorner+1) = lowy
+
+  nmid = npoints - 6
+  i1 = nptscorner + 2
+  i2 = i1 + nmid - 1
+  if (nmid > 0) then
+    tempfoil%x(i1:i2) = foil%x(4:npoints-3)
+    tempfoil%y(i1:i2) = foil%y(4:npoints-3)
+  end if
+
+  tempfoil%x(i2+1:i2+nptscorner) = upx
+  tempfoil%y(i2+1:i2+nptscorner) = upy
+
+  tempfoil%x(newnpoints) = foil%x(npoints)
+  tempfoil%y(newnpoints) = foil%y(npoints)
+
+! Copy back into foil
+
+  deallocate(foil%x)
+  deallocate(foil%y)
+  foil%npoints = newnpoints
+  allocate(foil%x(newnpoints))
+  allocate(foil%y(newnpoints))
+  foil%x = tempfoil%x
+  foil%y = tempfoil%y
+  deallocate(tempfoil%x)
+  deallocate(tempfoil%y)
+
+end subroutine round_te_corners
+
+!=============================================================================80
+!
+! Helper for round_te_corners: places npts points along a quadratic Bezier
+! blend that is tangent to segment A-P at one end and to segment P-B at the
+! other, cutting the corner at P. The blend endpoints lie on the original
+! segments, and the whole curve stays within the triangle A-P-B, so it can
+! never extend past the original corner.
+!
+!=============================================================================80
+subroutine fillet_corner(Ax, Ay, Px, Py, Bx, By, frac, npts, outx, outy)
+
+  double precision, intent(in) :: Ax, Ay, Px, Py, Bx, By, frac
+  integer, intent(in) :: npts
+  double precision, dimension(npts), intent(out) :: outx, outy
+
+  double precision :: d1, d2, r, t, P1x, P1y, P2x, P2y
+  integer :: i
+
+  d1 = sqrt((Px-Ax)**2.d0 + (Py-Ay)**2.d0)
+  d2 = sqrt((Bx-Px)**2.d0 + (By-Py)**2.d0)
+  r = frac * min(d1, d2)
+
+  P1x = Px + (r/d1)*(Ax-Px)
+  P1y = Py + (r/d1)*(Ay-Py)
+  P2x = Px + (r/d2)*(Bx-Px)
+  P2y = Py + (r/d2)*(By-Py)
+
+  do i = 1, npts
+    t = dble(i-1)/dble(npts-1)
+    outx(i) = (1.d0-t)**2.d0*P1x + 2.d0*(1.d0-t)*t*Px + t**2.d0*P2x
+    outy(i) = (1.d0-t)**2.d0*P1y + 2.d0*(1.d0-t)*t*Py + t**2.d0*P2y
+  end do
+
+end subroutine fillet_corner
 
 !=============================================================================80
 !
