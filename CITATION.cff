@@ -30,3 +30,21 @@ preferred-citation:
   year: 2025
   doi: "10.1080/14685248.2025.2608679"
   url: "https://www.tandfonline.com/doi/full/10.1080/14685248.2025.2608679"
+references:
+  - type: article
+    authors:
+      - family-names: Rouhi
+        given-names: Amirreza
+      - family-names: Kumar
+        given-names: Vishal
+      - family-names: Wu
+        given-names: Wen
+      - family-names: Kozul
+        given-names: Melissa
+      - family-names: Lehmkuhl
+        given-names: Oriol
+    title: "Leveraging unstructured grids for direct numerical simulations of wall turbulence"
+    year: 2026
+    month: 5
+    url: "http://arxiv.org/abs/2605.01015"
+    notes: "Cite this if you use the etaGrid_to_SOD2D pipeline specifically."

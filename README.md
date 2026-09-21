@@ -224,6 +224,19 @@ developed for:
 }
 ```
 
+If your work uses `etaGrid_to_SOD2D` specifically, please also cite the
+paper its underlying concept comes from:
+
+```bibtex
+@article{Rouhi2026,
+  author = {Amirreza Rouhi and Vishal Kumar and Wen Wu and Melissa Kozul and Oriol Lehmkuhl},
+  title  = {Leveraging unstructured grids for direct numerical simulations of wall turbulence},
+  month  = {5},
+  year   = {2026},
+  url    = {http://arxiv.org/abs/2605.01015}
+}
+```
+
 ## License
 
 Code original to this repository is released under the MIT License (see
