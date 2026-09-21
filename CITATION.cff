@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "AeroHexMesh: A Framework for Generating High-Order Hexahedral Meshes for Spectral-Element CFD Solvers"
+authors:
+  - family-names: Kumar
+    given-names: Vishal
+version: 1.0.0
+date-released: 2026-09-21
+url: "https://github.com/kvishalrai/AeroHexMesh"
+repository-code: "https://github.com/kvishalrai/AeroHexMesh"
+doi: "10.5281/zenodo.22875995"
+license: MIT
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Kumar
+      given-names: Vishal
+    - family-names: Tomboulides
+      given-names: Ananias
+    - family-names: Fischer
+      given-names: Paul
+    - family-names: Min
+      given-names: Misun
+  title: "Delayed detached-eddy simulations of NACA wing sections using spectral elements"
+  journal: "Journal of Turbulence"
+  volume: "26"
+  issue: "10-11"
+  start: 354
+  end: 381
+  year: 2025
+  doi: "10.1080/14685248.2025.2608679"
+  url: "https://www.tandfonline.com/doi/full/10.1080/14685248.2025.2608679"

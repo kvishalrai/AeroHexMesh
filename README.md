@@ -2,6 +2,8 @@
 
 *Computational Aerodynamics with Hexahedral Meshes*
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22875995.svg)](https://doi.org/10.5281/zenodo.22875995)
+
 A framework for generating high-order hexahedral 3D meshes for
 spectral-element CFD solvers, built around three independent front ends —
 pick whichever matches the geometry and resolution you actually have:
@@ -184,6 +186,43 @@ authors:
   initiative by Red.es, Ministerio para la Transformación Digital y de la
   Función Pública, for talent attraction (C005/24-ED CV1), funded by
   NextGenerationEU through PRTR.
+
+## Citation
+
+If you use this repository in your own work, please cite it:
+
+```bibtex
+@software{kumar2026aerohexmesh,
+  author  = {Kumar, Vishal},
+  title   = {{AeroHexMesh}: A Framework for Generating High-Order Hexahedral
+             Meshes for Spectral-Element {CFD} Solvers},
+  year    = {2026},
+  version = {v1.0.0},
+  url     = {https://github.com/kvishalrai/AeroHexMesh},
+  doi     = {10.5281/zenodo.22875995},
+  note    = {GitHub repository}
+}
+```
+
+If your work uses the `Construct2D_to_SOD2D`/`Construct2D_to_NEKRS` airfoil
+pipelines specifically, please also cite the paper this tooling was
+developed for:
+
+```bibtex
+@article{Kumar2025,
+  author  = {Vishal Kumar and Ananias Tomboulides and Paul Fischer and Misun Min},
+  title   = {Delayed detached-eddy simulations of NACA wing sections using spectral elements},
+  journal = {Journal of Turbulence},
+  volume  = {26},
+  issue   = {10-11},
+  pages   = {354-381},
+  month   = {11},
+  year    = {2025},
+  issn    = {1468-5248},
+  doi     = {10.1080/14685248.2025.2608679},
+  url     = {https://www.tandfonline.com/doi/full/10.1080/14685248.2025.2608679}
+}
+```
 
 ## License
 
