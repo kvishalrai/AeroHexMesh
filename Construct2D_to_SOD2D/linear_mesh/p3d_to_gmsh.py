@@ -377,6 +377,26 @@ class GmshFile(object):
         self.__mesh_type = mesh_type
         self.__wake_cut_alias = None
 
+        if p3dfmt_file.nblocks > 1:
+            # A genuinely different shape from the single-block OGRD/CGRD
+            # path below (untouched by this branch): e.g. a 2-block
+            # C-grid where the blunt trailing edge is resolved as its own
+            # small block. Block roles (which face is the wall,
+            # farfield, ...) are read from each boundary's own NAME
+            # rather than assumed from its face id -- the TE-closure
+            # block's own wall sits on a different face than the main
+            # block's -- and blocks are welded together by matching
+            # coordinates (_build_multiblock_weld) instead of the
+            # single-block wake-cut's index-offset alias, which only
+            # ever remaps within ONE block.
+            if mesh_type != 'CGRD':
+                raise ValueError(
+                    f"Multiblock input ({p3dfmt_file.nblocks} blocks) is only "
+                    f"supported for mesh_type='CGRD', got '{mesh_type}'"
+                )
+            self._consume_multiblock(p3dfmt_file, angle_of_attack, mapfile)
+            return
+
         one_to_one = [b for b in mapfile.boundaries if b[0].upper() in ('ONE_TO_ONE', 'ONE-TO-ONE')]
         if self.__mesh_type == 'CGRD' and one_to_one:
             # The wake-cut fold: build the node-id alias BEFORE consuming
@@ -428,6 +448,218 @@ class GmshFile(object):
             'i_lo_b': min(s2_b, e2_b) - 1, 'i_hi_b': max(s2_b, e2_b) - 1,
             'offset': s2_b - s2_a,  # i_b = offset - i_a (and vice versa)
         }
+
+    # ---- Multiblock path (>1 block; see consume()'s dispatch) ----------
+    #
+    # The single-block OGRD/CGRD path above welds at most one fold, always
+    # within one block, by an index offset (_build_wake_cut_alias). A
+    # multiblock case can have several folds, each possibly crossing two
+    # DIFFERENT blocks -- there's no single shared index offset that
+    # describes that in general, so instead every node keeps its own
+    # global id (_p3d_node_id, already block-aware) and welded folds are
+    # resolved by matching physical coordinates: for each ONE_TO_ONE
+    # boundary, the corresponding node-id pairs from its two sides are
+    # unioned into a small union-find, and every consumer below (node
+    # listing, hex elements, boundary faces) looks its ids up through
+    # that instead of using an id it computed itself directly.
+
+    @staticmethod
+    def _face56_node_ids(p3df, blkn, face, s1, e1, s2, e2):
+        """All node ids (not quad corners) along a face5 (j=0) / face6
+        (j=jmax) sub-range of one block, in i-outer/k-inner order -- used
+        to pair up the two sides of a cross-block ONE_TO_ONE weld
+        (_build_multiblock_weld). s1/e1 is the K sub-range (always
+        ascending -- spanwise, matches on both sides of any weld by
+        construction); s2/e2 is the I sub-range, and its own direction
+        (s2>e2 for a reversed side) encodes the fold's orientation --
+        same convention as _build_wake_cut_alias's single-block case, see
+        mesh_extrusion._remap_2d_face_to_3d.
+        """
+        x, _, _ = p3df.coords[blkn]
+        jdim = x.shape[1]
+        j = 0 if face == 5 else jdim - 1
+        i_vals = range(s2 - 1, e2 - 2, -1) if s2 > e2 else range(s2 - 1, e2)
+        k_vals = range(s1 - 1, e1)
+        return [GmshFile._p3d_node_id(p3df, blkn, i, j, k) for i in i_vals for k in k_vals]
+
+    def _build_multiblock_weld(self, p3dfmt_file, mapfile):
+        """Build the cross-block node-id union from every ONE_TO_ONE
+        boundary, and return a find(raw_id) closure resolving any node's
+        raw (_p3d_node_id) id to its weld's canonical (smallest) id --
+        callers use find() everywhere a raw id would otherwise be used,
+        both for the welded nodes themselves and for every other node
+        (find() is a no-op for an id nothing was ever unioned with)."""
+        parent = {}
+
+        def find(x):
+            root = x
+            while parent.get(root, root) != root:
+                root = parent[root]
+            while parent.get(x, x) != root:
+                parent[x], x = root, parent.get(x, x)
+            return root
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                lo, hi = (ra, rb) if ra < rb else (rb, ra)
+                parent[hi] = lo
+
+        for bdry in mapfile.boundaries:
+            if bdry[0].upper() not in ('ONE_TO_ONE', 'ONE-TO-ONE'):
+                continue
+            b1, f1, s1, e1, s2, e2 = bdry[1:7]
+            b2, f2, s1b, e1b, s2b, e2b = bdry[7:13]
+            if f1 not in (5, 6) or f2 not in (5, 6):
+                raise ValueError(
+                    f"Multiblock ONE_TO_ONE welding only supports face5/6 "
+                    f"(j=const) connections, got face {f1} (block {b1}) "
+                    f"matched to face {f2} (block {b2})"
+                )
+            ids_a = self._face56_node_ids(p3dfmt_file, b1 - 1, f1, s1, e1, s2, e2)
+            ids_b = self._face56_node_ids(p3dfmt_file, b2 - 1, f2, s1b, e1b, s2b, e2b)
+            if len(ids_a) != len(ids_b):
+                raise ValueError(
+                    f"ONE_TO_ONE weld side lengths differ: {len(ids_a)} "
+                    f"(block {b1}) vs {len(ids_b)} (block {b2})"
+                )
+            for a, b in zip(ids_a, ids_b):
+                union(a, b)
+
+        return find
+
+    def _consume_multiblock(self, p3dfmt_file, angle_of_attack, mapfile):
+        """Convert a multiblock (>1 block) P3Dfmt file into self -- the
+        dispatch target from consume() when p3dfmt_file.nblocks > 1; see
+        this section's own header comment above."""
+        find = self._build_multiblock_weld(p3dfmt_file, mapfile)
+
+        self.__groups.append((3, VOLUME_ID, 'VolumeCode'))
+        self.__groups.append((2, WALL_ID, 'wall'))
+        self.__groups.append((2, INLET_ID, 'inlet'))
+        self.__groups.append((2, OUTLET_ID, 'outlet'))
+
+        for blkn in range(p3dfmt_file.nblocks):
+            self._consume_block_multiblock(p3dfmt_file, blkn, find)
+
+        for bdry in mapfile.boundaries:
+            if bdry[0].upper() in ('ONE_TO_ONE', 'ONE-TO-ONE'):
+                continue
+            self._gen_boundary_multiblock(p3dfmt_file, angle_of_attack, bdry, find)
+
+    def _consume_block_multiblock(self, p3dfmt_file, blkn, find):
+        """Node/element emission for one block of a multiblock mesh: every
+        (i,j,k) still gets a node, but only under its weld's canonical id
+        (find() is a no-op for a non-welded node), and every hex corner
+        is looked up through find() too -- see _build_multiblock_weld."""
+        x, y, z = p3dfmt_file.coords[blkn]
+        idim, jdim, kdim = x.shape
+
+        for i in range(idim):
+            for j in range(jdim):
+                for k in range(kdim):
+                    raw_id = self._p3d_node_id(p3dfmt_file, blkn, i, j, k)
+                    if find(raw_id) != raw_id:
+                        continue
+                    self.__nodes.append((raw_id, x[i, j, k], y[i, j, k], z[i, j, k]))
+
+        shifts = [
+            [-1, -1, -1],
+            [-1, 0, -1],
+            [-1, 0, 0],
+            [-1, -1, 0],
+            [0, -1, -1],
+            [0, 0, -1],
+            [0, 0, 0],
+            [0, -1, 0],
+        ]
+        for i in range(1, idim):
+            for j in range(1, jdim):
+                for k in range(1, kdim):
+                    el_id = self.get_next_element_id()
+                    el = [el_id, 5, 2, VOLUME_ID, VOLUME_ID]
+                    for s in shifts:
+                        raw = self._p3d_node_id(p3dfmt_file, blkn, i + s[0], j + s[1], k + s[2])
+                        el.append(find(raw))
+                    self.__elements.append(el)
+
+    def _gen_boundary_multiblock(self, p3df, angle_of_attack, bdry, find):
+        """Emit one non-ONE_TO_ONE boundary's quad faces. Unlike the
+        single-block _gen_boundary, role (wall vs. farfield-outlet vs.
+        farfield-arc) is read from the boundary's own NAME rather than
+        assumed from its face id, since a second block's wall doesn't
+        have to sit on face5 -- e.g. the TE-closure block's own wall is
+        its face3. Node ids go through find() (see
+        _build_multiblock_weld) instead of the single-block path's
+        _p3d_node_id_closed_i."""
+        name = bdry[0].upper()
+        blkn = bdry[1] - 1
+        face = bdry[2]
+        s1, e1, s2, e2 = bdry[3:7]
+        x, _, _ = p3df.coords[blkn]
+        imax = x.shape[0] - 1
+        jmax = x.shape[1] - 1
+        kmax = x.shape[2] - 1
+
+        def nid(i, j, k):
+            return find(self._p3d_node_id(p3df, blkn, i, j, k))
+
+        # Face 1/2 (k=const, spanwise ends): every block's own k=0/kmax
+        # faces merge into ONE shared physical group per role (not one
+        # group per block, unlike the single-block path's per-record
+        # unique group) -- write_ext_nmf emits one SYMMETRY-Y record per
+        # block precisely so this loop sees, and merges, all of them.
+        if face in (1, 2):
+            role = 'k0-SYMMETRY-Y' if face == 1 else 'kmax-SYMMETRY-Y'
+            gid = self._get_or_create_group(role)
+            k_fixed = 0 if face == 1 else kmax
+            for j in range(s2 - 1, e2 - 1):
+                for i in range(s1 - 1, e1 - 1):
+                    el_id = self.get_next_element_id()
+                    n1, n2 = nid(i, j, k_fixed), nid(i + 1, j, k_fixed)
+                    n3, n4 = nid(i + 1, j + 1, k_fixed), nid(i, j + 1, k_fixed)
+                    conn = [n1, n4, n3, n2] if face == 1 else [n1, n2, n3, n4]
+                    self.__elements.append([el_id, 3, 2, gid, gid] + conn)
+            return
+
+        # Face 3/4 (i=const): either a block's own flat C-grid cut end
+        # (FARFIELD, always outlet -- same convention as the single-block
+        # path) or, for the TE-closure block, its wall (VISCOUS, face3).
+        if face in (3, 4):
+            i_fixed = 0 if face == 3 else imax
+            gid = self._get_or_create_group('wall' if name == 'VISCOUS' else 'outlet')
+            for k in range(s2 - 1, e2 - 1):
+                for j in range(s1 - 1, e1 - 1):
+                    el_id = self.get_next_element_id()
+                    n1, n2 = nid(i_fixed, j, k), nid(i_fixed, j + 1, k)
+                    n3, n4 = nid(i_fixed, j + 1, k + 1), nid(i_fixed, j, k + 1)
+                    conn = [n1, n4, n3, n2] if face == 3 else [n1, n2, n3, n4]
+                    self.__elements.append([el_id, 3, 2, gid, gid] + conn)
+            return
+
+        # Face 5/6 (j=const): the main block's wall (VISCOUS, face5) or
+        # its outer farfield arc (FARFIELD, face6 -- classified inlet/
+        # outlet per element exactly as the single-block path does).
+        if face in (5, 6):
+            j_fixed = 0 if face == 5 else jmax
+            for i in range(s2 - 1, e2 - 1):
+                for k in range(s1 - 1, e1 - 1):
+                    el_id = self.get_next_element_id()
+                    n1, n2 = nid(i, j_fixed, k), nid(i + 1, j_fixed, k)
+                    n3, n4 = nid(i + 1, j_fixed, k + 1), nid(i, j_fixed, k + 1)
+                    if name == 'VISCOUS':
+                        gid = self._get_or_create_group('wall')
+                        conn = [n1, n2, n3, n4]
+                    elif name == 'FARFIELD' and face == 6:
+                        group_name = self._classify_inlet_outlet(p3df, blkn, i, k, angle_of_attack)
+                        gid = self._get_or_create_group(group_name)
+                        conn = [n1, n4, n3, n2]
+                    else:
+                        raise ValueError(f"Unexpected {name} on face{face} (block {blkn + 1})")
+                    self.__elements.append([el_id, 3, 2, gid, gid] + conn)
+            return
+
+        raise ValueError(f"Unexpected boundary face id {face} for {name} (block {blkn + 1})")
 
     @staticmethod
     def __find_smallest_cell(p2dfmt_file):

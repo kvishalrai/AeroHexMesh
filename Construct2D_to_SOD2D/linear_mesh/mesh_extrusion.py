@@ -12,23 +12,58 @@ from pathlib import Path
 
 from p3d_to_gmsh import WALL_ID, INLET_ID, OUTLET_ID, VOLUME_ID
 
-def read_plot3d_2d(filename):
+def read_plot3d_2d_multiblock(filename):
+    """Read a 2D Plot3D file, single- or multi-block.
+
+    Construct2D's own single-block output has NO leading block-count line
+    -- it starts directly with "ni nj". A multi-block file (e.g. a 2-block
+    C-grid where the trailing edge is resolved as its own small block
+    instead of a couple of extra rows inside one O-grid) starts with a
+    block-count line, then one "ni nj" dims line per block, then the
+    coordinate data: per block, all of x (flattened Fortran-order, i
+    fastest) then all of y -- the same block-major/variable-within-block
+    convention as p3d_to_gmsh.P3DfmtFile.load (the 3D equivalent format).
+
+    Returns a list of (x2d, y2d) arrays, one per block (index 0 = block 1
+    in 1-based NMF numbering).
+    """
     with open(filename, 'r') as f:
-        ni, nj = map(int, f.readline().split())
+        first_line = f.readline().split()
+        if len(first_line) == 2:
+            # Single-block: no leading count, this line IS the dims.
+            dims = [tuple(map(int, first_line))]
+        else:
+            nblocks = int(first_line[0])
+            dims = [tuple(map(int, f.readline().split())) for _ in range(nblocks)]
 
-        # Read x values
-        x_vals = []
-        while len(x_vals) < ni * nj:
-            x_vals += list(map(float, f.readline().split()))
-        x2d = np.array(x_vals).reshape((ni, nj), order='F')  # shape: (ni, nj)
+        def read_values(n):
+            vals = []
+            while len(vals) < n:
+                vals += list(map(float, f.readline().split()))
+            return np.array(vals)
 
-        # Read y values
-        y_vals = []
-        while len(y_vals) < ni * nj:
-            y_vals += list(map(float, f.readline().split()))
-        y2d = np.array(y_vals).reshape((ni, nj), order='F')
+        blocks = []
+        for ni, nj in dims:
+            npts = ni * nj
+            x2d = read_values(npts).reshape((ni, nj), order='F')
+            y2d = read_values(npts).reshape((ni, nj), order='F')
+            blocks.append((x2d, y2d))
+    return blocks
 
-    return x2d, y2d
+
+def read_plot3d_2d(filename):
+    """Backward-compatible single-block reader: unchanged behavior/output
+    for the single-block files this pipeline has always taken (identical
+    lines consumed in the identical order as before), built on top of
+    read_plot3d_2d_multiblock. Raises if the file actually has >1 block --
+    use read_plot3d_2d_multiblock directly for those."""
+    blocks = read_plot3d_2d_multiblock(filename)
+    if len(blocks) != 1:
+        raise ValueError(
+            f"{filename}: expected a single-block 2D Plot3D file, got "
+            f"{len(blocks)} blocks -- use read_plot3d_2d_multiblock instead"
+        )
+    return blocks[0]
 
 def extrude_spanwise(x2d, y2d, z_vals):
     ni, nj = x2d.shape
@@ -45,20 +80,34 @@ def extrude_spanwise(x2d, y2d, z_vals):
 
     return x3d, y3d, z3d  # shape: (ni, nj, nk)
 
-def write_plot3d_ascii(filename, x, y, z):
-    ni, nj, nk = x.shape
+def write_plot3d_ascii_multiblock(filename, blocks_3d):
+    """blocks_3d: list of (x, y, z), each shape (ni, nj, nk). Always writes
+    the leading block-count + per-block dims header expected by
+    p3d_to_gmsh.P3DfmtFile.load (its 3D reader already requires this,
+    even for one block), then per block all of x, then y, then z
+    (flattened Fortran-order, i fastest) -- so a single-block call here
+    reproduces write_plot3d_ascii's own output exactly."""
     with open(filename, 'w') as f:
-        f.write("1\n")  # One block
-        f.write(f"{ni} {nj} {nk}\n")
+        f.write(f"{len(blocks_3d)}\n")
+        for x, y, z in blocks_3d:
+            ni, nj, nk = x.shape
+            f.write(f"{ni} {nj} {nk}\n")
 
         def write_array(arr):
-            flat = arr.flatten(order='F')  # Fortran-style (i,j,k) → k fastest
+            flat = arr.flatten(order='F')  # Fortran-style (i,j,k) → i fastest
             for i in range(0, len(flat), 5):
                 f.write(" ".join(f"{v:.8e}" for v in flat[i:i+5]) + "\n")
 
-        write_array(x)
-        write_array(y)
-        write_array(z)
+        for x, y, z in blocks_3d:
+            write_array(x)
+            write_array(y)
+            write_array(z)
+
+
+def write_plot3d_ascii(filename, x, y, z):
+    """Backward-compatible single-block writer: unchanged output, built on
+    top of write_plot3d_ascii_multiblock."""
+    write_plot3d_ascii_multiblock(filename, [(x, y, z)])
 
 def sod2d_mesh(filename,work_dir,z_len,z_plane,MESH_TYPE):
 
@@ -84,37 +133,52 @@ def sod2d_mesh(filename,work_dir,z_len,z_plane,MESH_TYPE):
             f".p3d/.nmf pair yourself (mesh_type={MESH_TYPE})."
         )
 
-    # 2) Read 2D grid
-    x2d, y2d = read_plot3d_2d(output_file)
+    # 2) Read 2D grid (single- or multi-block -- see
+    #    read_plot3d_2d_multiblock's own docstring for the format
+    #    difference; a single-block file naturally comes back as one
+    #    block, so this is a strict generalization of the old single-
+    #    block-only reader).
+    blocks_2d = read_plot3d_2d_multiblock(output_file)
 
-    # 3) Define extrusion in z (spanwise direction)
+    # 3) Define extrusion in z (spanwise direction), same z_planes for
+    #    every block (a multiblock case's blocks all share one spanwise
+    #    extent -- see write_ext_nmf).
     z_plane = int(z_plane)
     z_len = float(z_len)
     z_planes = np.linspace(0.0, z_len, z_plane)  # You can set more layers if needed
 
-    x3d, y3d, z3d = extrude_spanwise(x2d, y2d, z_planes)
+    blocks_3d = [extrude_spanwise(x2d, y2d, z_planes) for x2d, y2d in blocks_2d]
 
     # 4) Write 3D extended Plot3D in work_dir with _ext suffix
     base = Path(filename).stem
     out_p3d = work_dir / f"{base}_ext.p3d"
-    write_plot3d_ascii(out_p3d, x3d, y3d, z3d)
+    write_plot3d_ascii_multiblock(out_p3d, blocks_3d)
     
 def _read_2d_nmf(nmf_path):
-    """Parse a user-supplied 2D (KDIM=1) Construct2D Neutral Map File.
+    """Parse a user-supplied 2D (KDIM=1) Construct2D Neutral Map File,
+    single- or multi-block (the NMF format itself always carries a
+    leading block-count + one dims line per block, regardless of block
+    count -- unlike the .p3d grid file, see read_plot3d_2d_multiblock).
 
-    Returns (idim, jmax, boundaries) where boundaries is a list of dicts
-    with keys name, b1, f1, s1, e1, s2, e2, and, for ONE_TO_ONE/
-    ONE-TO-ONE lines only, an additional 'pair' dict (b2, f2, s1, e1, s2,
-    e2) describing the matched second range -- the standard NMF ONE_TO_ONE
-    line packs two ranges (12 ints) instead of the usual one (6 ints).
+    Returns (block_dims, boundaries) where block_dims is a list of
+    (idim, jmax) tuples, one per block (index 0 = block 1), and
+    boundaries is a list of dicts with keys name, b1, f1, s1, e1, s2, e2,
+    and, for ONE_TO_ONE/ONE-TO-ONE lines only, an additional 'pair' dict
+    (b2, f2, s1, e1, s2, e2) describing the matched second range -- the
+    standard NMF ONE_TO_ONE line packs two ranges (12 ints) instead of
+    the usual one (6 ints). Every boundary from every block is returned
+    (each record's own b1/pair.b2 says which); callers that only handle
+    a single block can just look at boundaries with b1 == 1.
     """
     with open(nmf_path, 'r') as fp:
         non_comment = [l for l in fp if not l.lstrip().startswith('#')]
     non_blank = [l for l in non_comment if l.strip() != '']
 
     nblocks = int(non_blank[0].split()[0])
-    dims_tokens = non_blank[1].split()
-    idim, jmax = int(dims_tokens[1]), int(dims_tokens[2])
+    block_dims = []
+    for bn in range(nblocks):
+        dims_tokens = non_blank[1 + bn].split()
+        block_dims.append((int(dims_tokens[1]), int(dims_tokens[2])))
     boundary_lines = non_blank[1 + nblocks:]
 
     boundaries = []
@@ -138,7 +202,7 @@ def _read_2d_nmf(nmf_path):
             }
         boundaries.append(rec)
 
-    return idim, jmax, boundaries
+    return block_dims, boundaries
 
 
 def _remap_2d_face_to_3d(face_2d, s1, e1, s2, e2, z_planes):
@@ -178,20 +242,38 @@ def write_ext_nmf(airfoil_file, work_dir, z_planes, mesh_type):
         (VISCOUS) plus a wake-cut ONE_TO_ONE fold matching two i
         sub-ranges of the SAME face. i is not periodically closed for a
         C-grid, but the wake-cut nodes ARE physically coincident, so
-        they're merged the same way as OGRD's closure.
+        they're merged the same way as OGRD's closure. A second,
+        genuinely different CGRD shape is also accepted: a 2-block file
+        where the blunt trailing edge is resolved as its own small block
+        (its wall is the straight TE-closure line, its far end is
+        FARFIELD) instead of a couple of extra rows inside one O-grid --
+        there the two ONE_TO_ONE folds connect DIFFERENT blocks (not
+        different faces of the same one), so the same-face check below
+        only applies when both sides are the same block.
 
-    Both cases are kept as a single ONE_TO_ONE line (remapped onto the
-    extruded block). p3d_to_gmsh.py's GmshFile never emits a boundary face
-    for a ONE_TO_ONE connection -- instead it aliases node ids across the
-    fold/closure (GmshFile._p3d_node_id_closed_i /
-    GmshFile._build_wake_cut_alias), so no Gmsh-side periodic surface or
-    node merge is needed for either case.
+    Every ONE_TO_ONE fold (same-block wake-cut, O-grid closure, or a
+    cross-block weld) is kept as a single ONE_TO_ONE line (remapped onto
+    the extruded blocks). p3d_to_gmsh.py's GmshFile never emits a
+    boundary face for a ONE_TO_ONE connection -- instead it aliases node
+    ids across it (GmshFile._p3d_node_id_closed_i /
+    GmshFile._build_wake_cut_alias for the same-block case,
+    GmshFile._build_multiblock_weld for a cross-block one), so no
+    Gmsh-side periodic surface or node merge is needed for any of them.
 
     The other (non-ONE_TO_ONE) boundaries -- the airfoil wall and every
-    farfield-type face -- are classified as wall/inlet/outlet by
-    p3d_to_gmsh.py itself (GmshFile._classify_inlet_outlet), since that
-    needs per-element geometry; this function only remaps face numbers
-    and ranges, carrying the original boundary name through unchanged.
+    farfield-type face, on any block -- are classified as wall/inlet/
+    outlet by p3d_to_gmsh.py itself (GmshFile._classify_inlet_outlet for
+    the AoA-dependent farfield arc; VISCOUS is always wall, and the flat
+    C-grid cut ends are always outlet, regardless of which block they're
+    on), since that needs per-element geometry; this function only
+    remaps face numbers and ranges, carrying the original boundary name
+    through unchanged.
+
+    Returns (idim, jmax, boundaries_2d): idim/jmax describe block 1 only
+    (the only block for every case before the 2-block one above, and the
+    main C-grid block there too), for callers that only handle a single
+    block; boundaries_2d covers every block (each record's own b1/
+    pair['b2'] says which).
     """
     work_dir = Path(work_dir)
     mesh_type = mesh_type.upper()
@@ -209,7 +291,7 @@ def write_ext_nmf(airfoil_file, work_dir, z_planes, mesh_type):
             f"Expected the user-supplied 2D Neutral Map File at {src_nmf}"
         )
 
-    idim, jmax, boundaries_2d = _read_2d_nmf(src_nmf)
+    block_dims, boundaries_2d = _read_2d_nmf(src_nmf)
 
     lines = []
 
@@ -226,22 +308,31 @@ def write_ext_nmf(airfoil_file, work_dir, z_planes, mesh_type):
         f3d_b, s1b, e1b, s2b, e2b = _remap_2d_face_to_3d(
             pair['f2'], pair['s1'], pair['e1'], pair['s2'], pair['e2'], z_planes)
 
+        same_block = rec['b1'] == pair['b2']
         if mesh_type == 'OGRD' and rec['f1'] == pair['f2']:
             raise ValueError(
                 f"OGRD expects the ONE_TO_ONE closure to connect two "
                 f"different faces (i=imin/i=imax), got face {rec['f1']} "
                 f"matched to itself in {src_nmf}"
             )
-        if mesh_type == 'CGRD' and rec['f1'] != pair['f2']:
+        if mesh_type == 'CGRD' and same_block and rec['f1'] != pair['f2']:
             raise ValueError(
                 f"CGRD expects the ONE_TO_ONE wake-cut to connect two "
                 f"sub-ranges of the SAME face (the wall face), got "
                 f"face {rec['f1']} matched to face {pair['f2']} in {src_nmf}"
             )
-        # Either the O-grid's full periodic closure or the C-grid's
-        # wake-cut fold: keep as a single ONE_TO_ONE line. p3d_to_gmsh.py's
-        # GmshFile aliases node ids across it instead of emitting a
-        # boundary face, so it consumes no physical-group id.
+        if mesh_type == 'CGRD' and not same_block and (rec['f1'] not in (3, 4) or pair['f2'] not in (3, 4)):
+            raise ValueError(
+                f"CGRD expects a cross-block ONE_TO_ONE weld (block "
+                f"{rec['b1']} <-> block {pair['b2']}) to connect two "
+                f"j-const (2D face3/4) faces, got face {rec['f1']} "
+                f"matched to face {pair['f2']} in {src_nmf}"
+            )
+        # The O-grid's full periodic closure, a same-block C-grid's
+        # wake-cut fold, or a cross-block weld: keep as a single
+        # ONE_TO_ONE line. p3d_to_gmsh.py's GmshFile aliases node ids
+        # across it instead of emitting a boundary face, so it consumes
+        # no physical-group id.
         lines.append(
             f"ONE_TO_ONE  {rec['b1']:5d}{f3d:5d}    {s1:5d}{e1:5d}    {s2:5d}{e2:5d}  "
             f"{pair['b2']:5d}{f3d_b:5d}    {s1b:5d}{e1b:5d}    {s2b:5d}{e2b:5d} FALSE\n"
@@ -250,14 +341,34 @@ def write_ext_nmf(airfoil_file, work_dir, z_planes, mesh_type):
     with open(nmf_file, "w") as f:
         f.write("# ==================== Neutral Map File (extruded, derived from the user-supplied 2D NMF) ====================\n")
         f.write("# Block#   IDIM   JDIM   KDIM\n")
-        f.write("       1\n\n")
-        f.write(f"       1    {idim:3d}    {jmax:3d}      {z_planes:2d}\n\n")
+        # NeutralMapFile's own reader (p3d_to_gmsh.py, used for the
+        # extruded NMF) skips this whole section by a FIXED line count --
+        # one blank line, then exactly one line per block (back-to-back,
+        # no blank between them), then one more blank line -- not by
+        # recognizing dims lines individually, so the blank lines must
+        # only bracket the whole block, never sit between two dims lines
+        # (matches the actual Construct2D multiblock NMF format, e.g.
+        # Construct2D/oat15_full_2block.nmf).
+        f.write(f"       {len(block_dims)}\n\n")
+        for bn, (bi, bj) in enumerate(block_dims, start=1):
+            f.write(f"       {bn}    {bi:3d}    {bj:3d}      {z_planes:2d}\n")
+        f.write("\n")
         f.write("# Type         B1  F1     S1   E1     S2   E2    B2  F2     S1   E1     S2   E2  Swap\n")
-        f.write(f"SYMMETRY-Y    1    1      1    {idim}      1   {jmax}\n")
-        f.write(f"SYMMETRY-Y    1    2      1    {idim}      1   {jmax}\n")
+        for bn, (bi, bj) in enumerate(block_dims, start=1):
+            # Every block's own spanwise end caps need a SYMMETRY-Y entry
+            # -- for a single block this reproduces the previous fixed
+            # "block 1" lines exactly; a second (or later) block's own
+            # pair is additive, needed so its k=0/kmax faces get
+            # boundary elements/periodic tagging too (see
+            # GmshFile._gen_boundary_multiblock, which merges every
+            # block's own k=0 entries into one shared physical group,
+            # and likewise for kmax, rather than one group per block).
+            f.write(f"SYMMETRY-Y    {bn}    1      1    {bi}      1   {bj}\n")
+            f.write(f"SYMMETRY-Y    {bn}    2      1    {bi}      1   {bj}\n")
         f.writelines(lines)
 
     print(f"Wrote {nmf_file}")
+    idim, jmax = block_dims[0]
     return idim, jmax, boundaries_2d
 
 

@@ -1,0 +1,8 @@
+{
+   "mesh_type":"CGRD",
+   "angle_of_attack":3.5,
+   "z_spanwise_len":0.065,
+   "z_spanwise_planes":17,
+   "porder":4,
+   "num_partitions":16
+}

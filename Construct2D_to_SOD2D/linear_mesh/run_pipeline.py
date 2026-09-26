@@ -22,7 +22,7 @@ from mesh_extrusion import (
     write_ext_nmf,
     write_geo_file,
     write_partition_input_json,
-    read_plot3d_2d,
+    read_plot3d_2d_multiblock,
     PERIODIC_ID,
 )
 from p3d_to_gmsh import p3d2gmsh
@@ -175,10 +175,10 @@ def sod2d_airfoil(
         # directly and parametrically (arc-length interpolation, no nearest-
         # point search) onto the wall's own shape without moving any corner
         # node.
-        x2d, y2d = read_plot3d_2d(work_dir / f"{airfoil_name}.p3d")
+        wall_blocks = read_plot3d_2d_multiblock(work_dir / f"{airfoil_name}.p3d")
         wall_spline_file = work_dir / f"{airfoil_name}_wall_spline.dat"
         build_wall_spline_table(
-            x2d, y2d, boundaries_2d, mesh_type, wall_spline_file
+            wall_blocks, boundaries_2d, mesh_type, wall_spline_file
         )
         print(f"[environment {env_id}] Wrote wall spline table: {wall_spline_file}")
 
