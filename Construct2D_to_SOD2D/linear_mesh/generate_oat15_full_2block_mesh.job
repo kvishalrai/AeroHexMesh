@@ -1,0 +1,41 @@
+#!/bin/bash
+# Runs the linear_mesh pipeline (run_pipeline.py: extrude -> wall spline ->
+# p3d_to_gmsh -> gmsh order-elevation -> gmsh2sod2d -> partition) on the
+# OAT15A 2-block C-grid (Construct2D/oat15_full_2block.p3d): a main C-grid
+# block (576x100) plus a second, small block (50x4) that resolves the
+# blunt trailing edge's straight-line base as its own block instead of a
+# couple of extra rows inside one O-grid -- see mesh_extrusion.py /
+# wall_spline.py / p3d_to_gmsh.py's own multiblock-path comments.
+# Submitted as a batch job for the same reason as generate_oat15_mesh.job:
+# the order-elevation and partitioning steps need more than the login
+# node's 300s CPU limit and a couple GB of RAM.
+#
+#   sbatch generate_oat15_full_2block_mesh.job
+#SBATCH --job-name=oat15_2blk_linear_mesh
+#SBATCH -D .
+#SBATCH --output=generate.o
+#SBATCH --error=generate.e
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=112
+##SBATCH --cpus-per-task=16
+#SBATCH --qos=gp_debug
+#SBATCH --time=02:00:00
+#SBATCH --account=bsc21
+
+set +e
+source /etc/profile.d/modules.sh 2>/dev/null
+module load anaconda/2023.07 >/dev/null 2>&1
+set -e
+
+WORK_DIR="runs/oat15_full_2block"
+
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"
+
+cp -v ../../Construct2D/oat15_full_2block.p3d "$WORK_DIR/airfoil.p3d"
+cp -v ../../Construct2D/oat15_full_2block.nmf "$WORK_DIR/airfoil.nmf"
+
+python3 run_pipeline.py \
+    --work-dir "$WORK_DIR" \
+    --config flow_config_oat15_full_2block.json \
+    --airfoil-file airfoil
