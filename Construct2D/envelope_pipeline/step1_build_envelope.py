@@ -51,16 +51,23 @@ MAIN_TE, MAIN_COVE_TOP, MAIN_COVE_BOT, MAIN_LE = 0, 40, 57, 122
 FLAP_LOWER_TE, FLAP_LE = 0, 97
 
 
-def tangent_landing(P, surf, lo, hi):
-    """Index k in [lo, hi] where the straight line P -> surf[k] is most
-    nearly tangent to the surface (central-difference tangent)."""
-    best, best_k = None, None
+def landing_for_angle(P, surf, lo, hi, theta):
+    """Index k in [lo, hi] where a straight bridge P -> surf[k] meets the
+    surface (central-difference tangent, increasing index) at the signed
+    angle closest to theta (deg, ccw > 0, i.e. concave on the envelope).
+    theta = 0 is the tangent landing. Returns (k, actual angle)."""
+    best, best_k, best_a = None, None, None
     for k in range(lo, hi + 1):
         t = surf[(k + 1) % len(surf)] - surf[k - 1]
-        a = abs(turn_deg(surf[k] - P, t))   # same direction only
-        if best is None or a < best:
-            best, best_k = a, k
-    return best_k, best
+        a = turn_deg(surf[k] - P, t)
+        if best is None or abs(a - theta) < best:
+            best, best_k, best_a = abs(a - theta), k, a
+    return best_k, best_a
+
+
+def rotate_deg(v, deg):
+    c, s_ = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+    return np.array([c * v[0] - s_ * v[1], s_ * v[0] + c * v[1]])
 
 
 def straight_bridge(P0, P1, ds0, ds1, n):
@@ -78,9 +85,22 @@ def main():
     ap.add_argument('--flap-lower-landing', type=int, default=66,
                     help='flap index where the lower flap bridge lands (default 66)')
     ap.add_argument('--main-upper-landing', type=int, default=None,
-                    help='main index for the upper slat bridge (default: tangent point)')
+                    help='main index for the upper slat bridge (default: found '
+                         'from the landing angle)')
     ap.add_argument('--flap-upper-landing', type=int, default=None,
-                    help='flap index for the upper flap bridge (default: tangent point)')
+                    help='flap index for the upper flap bridge (default: found '
+                         'from the landing angle)')
+    ap.add_argument('--landing-angle', type=float, default=22.0,
+                    help='angle (deg) at which every bridge meets the surface it '
+                         'lands on. It is both the concave kink in the envelope '
+                         'and the slot block\'s corner angle there. 0 = tangent '
+                         '(smooth envelope, zero-angle block corner). Default 22: '
+                         'block corners clear the 20 deg gate, and the '
+                         'Construct2D mesh is unaffected up to about 23 deg '
+                         '(PLAN.md, "Landing points")')
+    for b in ('slat-upper', 'flap-upper', 'slat-lower', 'flap-lower'):
+        ap.add_argument(f'--theta-{b}', type=float, default=None,
+                        help=f'landing angle for the {b} bridge (default: --landing-angle)')
     ap.add_argument('--lower-arrival', choices=['chord', 'tangent'], default='chord',
                     help="lower bridges' end direction: along the bridge chord "
                          "(small convex kink at the hook tip / cove corner, no "
@@ -92,8 +112,12 @@ def main():
                     help='max neighbour spacing ratio on bridges (default 1.2)')
     ap.add_argument('--dsmax', type=float, default=0.005,
                     help='max point spacing on bridges (default 0.005)')
-    ap.add_argument('--no-match', action='store_true',
-                    help='do not force equal counts on the two bridges of a slot')
+    ap.add_argument('--match', choices=['slat', 'both', 'none'], default='slat',
+                    help='which slots get equal point counts on their two bridges '
+                         '(needed when one H-block spans the slot). Default slat: '
+                         'the main-flap bridges differ ~10x in length, so that '
+                         'slot will be split into sub-blocks (PLAN.md) and its '
+                         'counts are left independent until that layout is fixed')
     ap.add_argument('--xfar', type=float, default=20.0,
                     help='x where the downstream lines end (default 20)')
     ap.add_argument('--far-end', choices=['free', 'mirror'], default='free',
@@ -133,14 +157,27 @@ def main():
     # ---- landing points --------------------------------------------------
     ml_land = args.main_lower_landing
     fl_land = args.flap_lower_landing
-    mu_auto, mu_err = tangent_landing(S[SLAT_TIP], M, MAIN_LE + 1, nM - 1)
-    fu_auto, fu_err = tangent_landing(M[MAIN_TE], F, FLAP_LE + 1, nF - 2)
-    mu_land = args.main_upper_landing if args.main_upper_landing is not None else mu_auto
-    fu_land = args.flap_upper_landing if args.flap_upper_landing is not None else fu_auto
-    print(f"Upper slat landing: main {mu_land} (tangent point {mu_auto}, "
-          f"{mu_err:.2f} deg off tangent)")
-    print(f"Upper flap landing: flap {fu_land} (tangent point {fu_auto}, "
-          f"{fu_err:.2f} deg off tangent)")
+    def th(name):
+        v = getattr(args, 'theta_' + name.replace('-', '_'))
+        return args.landing_angle if v is None else v
+    theta = {b: th(b) for b in ('slat-upper', 'flap-upper', 'slat-lower', 'flap-lower')}
+
+    # Upper landings: search the surface from just aft of the LE back to the
+    # tangent point (a landing aft of it would cut into the element).
+    mu_tan, _ = landing_for_angle(S[SLAT_TIP], M, MAIN_LE + 1, nM - 1, 0.0)
+    fu_tan, _ = landing_for_angle(M[MAIN_TE], F, FLAP_LE + 1, nF - 2, 0.0)
+    if args.main_upper_landing is not None:
+        mu_land = args.main_upper_landing
+    else:
+        mu_land, _ = landing_for_angle(S[SLAT_TIP], M, MAIN_LE + 1, mu_tan,
+                                       theta['slat-upper'])
+    if args.flap_upper_landing is not None:
+        fu_land = args.flap_upper_landing
+    else:
+        fu_land, _ = landing_for_angle(M[MAIN_TE], F, FLAP_LE + 1, fu_tan,
+                                       theta['flap-upper'])
+    print(f"Upper slat landing: main {mu_land} (tangent point {mu_tan}); "
+          f"upper flap landing: flap {fu_land} (tangent point {fu_tan})")
     if not (MAIN_COVE_BOT < ml_land < MAIN_LE):
         raise SystemExit("--main-lower-landing must lie on the main lower surface")
     if not (FLAP_LOWER_TE < fl_land < FLAP_LE):
@@ -150,22 +187,26 @@ def main():
         return float(np.hypot(*(a[j] - a[i])))
 
     # ---- bridges -----------------------------------------------------------
-    # Upper bridges: straight, tangent landing.
+    # Upper bridges: straight, landing at the chosen angle.
     up_slat = dict(P0=S[SLAT_TIP], P1=M[mu_land],
                    ds0=sp(S, nS - 1, SLAT_TIP), ds1=sp(M, mu_land, mu_land + 1))
     up_flap = dict(P0=M[MAIN_TE], P1=F[fu_land],
                    ds0=sp(M, nM - 1, MAIN_TE), ds1=sp(F, fu_land, fu_land + 1))
 
-    # Lower bridges: Hermite, leaving tangent to the surface they start on.
+    # Lower bridges: Hermite, leaving the surface they start on at the chosen
+    # angle (rotated ccw from the surface tangent, i.e. away from the nose
+    # the slot block wraps around).
     def lower_dense(P0, t0, P1, t_next):
         chord = P1 - P0
         t1 = chord if args.lower_arrival == 'chord' else t_next
         L = np.hypot(*chord)
         return hermite_dense(P0, P1, t0, t1, args.pull * L, args.pull * L)
 
-    lo_slat_dense = lower_dense(M[ml_land], M[ml_land] - M[ml_land - 1],
+    lo_slat_dense = lower_dense(M[ml_land],
+                                rotate_deg(M[ml_land] - M[ml_land - 1], theta['slat-lower']),
                                 S[SLAT_HOOK], S[SLAT_HOOK + 1] - S[SLAT_HOOK])
-    lo_flap_dense = lower_dense(F[fl_land], F[fl_land] - F[fl_land - 1],
+    lo_flap_dense = lower_dense(F[fl_land],
+                                rotate_deg(F[fl_land] - F[fl_land - 1], theta['flap-lower']),
                                 M[MAIN_COVE_BOT], M[MAIN_COVE_BOT + 1] - M[MAIN_COVE_BOT])
     lo_slat = dict(L=arc_length(lo_slat_dense), ds0=sp(M, ml_land - 1, ml_land),
                    ds1=sp(S, SLAT_HOOK, SLAT_HOOK + 1))
@@ -176,9 +217,22 @@ def main():
 
     for b in (up_slat, up_flap, lo_slat, lo_flap):
         b['n'] = choose_bridge_count(b['L'], b['ds0'], b['ds1'], args.rmax, args.dsmax)
-    if not args.no_match:
-        for a, b in ((up_slat, lo_slat), (up_flap, lo_flap)):
+    pairs = {'slat': [(up_slat, lo_slat)], 'none': [],
+             'both': [(up_slat, lo_slat), (up_flap, lo_flap)]}[args.match]
+    if pairs:
+        # Raising one bridge's count to match its partner changes its
+        # distribution, so search upward until both pass the limits at the
+        # same count.
+        for a, b in pairs:
             n = max(a['n'], b['n'])
+            while True:
+                na = choose_bridge_count(a['L'], a['ds0'], a['ds1'], args.rmax,
+                                         args.dsmax, nmin=n)
+                nb = choose_bridge_count(b['L'], b['ds0'], b['ds1'], args.rmax,
+                                         args.dsmax, nmin=n)
+                if na == nb == n:
+                    break
+                n = max(na, nb)
             a['n'] = b['n'] = n
 
     up_slat_pts = straight_bridge(up_slat['P0'], up_slat['P1'],
@@ -274,7 +328,7 @@ def main():
     add('lower_line', lower_line[1:][::-1])
     add('flap_lower', F[0:fl_land + 1], 'flap', list(range(0, fl_land + 1)))
     add('bridge_flap_lower', lo_flap_pts[1:-1])
-    add('main_lower', M[MAIN_COVE_BOT:ml_land + 1][::-1][::-1], 'main',
+    add('main_lower', M[MAIN_COVE_BOT:ml_land + 1], 'main',
         list(range(MAIN_COVE_BOT, ml_land + 1)))
     add('bridge_slat_lower', lo_slat_pts[1:-1])
     slat_idx = list(range(SLAT_HOOK, nS)) + [SLAT_TIP]
@@ -405,6 +459,7 @@ def main():
         'params': vars(args),
         'landings': {'main_upper': mu_land, 'flap_upper': fu_land,
                      'main_lower': ml_land, 'flap_lower': fl_land},
+        'landing_angles_requested': theta,
         'bridge_intervals': {k: b['n'] for k, b in (
             ('slat_upper', up_slat), ('slat_lower', lo_slat),
             ('flap_upper', up_flap), ('flap_lower', lo_flap))},

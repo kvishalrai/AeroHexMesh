@@ -69,8 +69,8 @@ What the first runs found (now built into the scripts):
   go through `grid_options.in`, with `topo='CGRD'` set explicitly.
 - **Tangent landings leave long slivers, not just thin corners.** In the
   middle half of each upper bridge, the gap to the wall it lands on is only
-  0.0017 (slat → main) and 0.0004 (main → flap). Step 1 reports this as a
-  warning. It is the main input to the landing trade-off before step 4.
+  0.0017 (slat → main) and 0.0004 (main → flap). This settled the landing
+  trade-off: default θ = 22° (see "Landing points").
 
 ## Goal
 
@@ -284,18 +284,42 @@ block.
   surface) would remove the kink and widen the block corner to about 172°.
   That is optional, and worth trying if the extruded cells at the slat tip
   look skewed.
-- **Landings are the real trade-off.** A tangent landing gives a smooth
-  envelope but a near-zero block corner (1.3°, 0°). A steeper landing helps
-  the block but puts a concave kink in the envelope. The two lower bridges
-  show this the other way round: a straight bridge gives the block 53° and
-  19.5° but a concave envelope turn (53° at main 103). An S-blend that lands
-  tangent removes the concave turn but takes those block corners to near zero
-  too.
-- **Starting choice:** favor the envelope, since it drives the whole outer
-  mesh. Use tangent upper landings and an S-blend on the lower bridges, then
-  handle the four thin corners inside the blocks. If step 4 cannot get those
-  corners through the quality gates (C8), move each landing a few degrees off
-  tangent. Log the trade-off in the meta file (C6).
+- **Landings: decided, θ = 22° (2026-10-04).** At every landing, the
+  concave kink in the envelope and the slot block's corner are the same
+  angle θ: the angle between the bridge and the surface it lands on. Step 1
+  takes `--landing-angle` (default 22) and per-bridge `--theta-*`
+  overrides. The upper bridges stay straight, and step 1 slides their
+  landing point forward until the bridge meets the surface at θ. The lower
+  bridges keep their landing point and leave it at θ. Sweep, all four
+  bridges at the same θ, through steps 1–3:
+
+  | θ | upper landings (main / flap index) | worst Construct2D cell angle | near-landing cells (j ≤ 30) |
+  |---|---|---|---|
+  | 0 | 158 / 139 | 41.6° | ≥ 87° |
+  | 10 | 153 / 131 | 43.5° | ≥ 82° |
+  | 15 | 151 / 129 | 44.1° | ≥ 79° |
+  | 20 | 149 / 127 | 41.5° | ≥ 76° |
+  | 25 | 148 / 125 | 29.3° | ≥ 71° |
+  | 30 | 146 / 124 | 22.0° | ≥ 68° |
+  | 35 | 145 / 123 | 14.5° | ≥ 64° |
+
+  (Sweep run with matched counts on both slots; see below.) From θ = 25° the
+  region above the flap upper landing, right under the main TE, degrades
+  fast. The block-corner gate (C8) needs θ ≥ 20°. The upper landings move in
+  whole raw-point steps, so θ = 20° leaves the flap corner at 20.1°, while
+  θ = 21–23° all pick flap index 126 (corner 23°). Hence θ = 22°.
+
+  Result with θ = 22° and `--match slat`: 0 folded cells, worst cell angle
+  45.9° (better than tangent's 41.6°). Block corners 22–24°. Sliver clearance
+  at mid-bridge 0.0063 (slat → main, was 0.0017) and 0.0023 (main → flap, was
+  0.0004; still flagged, 18% of the 0.0127 slot gap). Max spacing ratio
+  along the curve 1.163 (raw surface), unchanged from tangent.
+- **Main–flap bridge counts are not matched.** At θ = 22° the upper flap
+  bridge is 0.0215 long and the lower one 0.200. Forcing equal counts (50)
+  onto the short one cannot keep neighbour ratios ≤ 1.2 against the surface
+  spacing, and it dropped the worst cell angle to 35.6°. Step 1's `--match`
+  (default `slat`) therefore ties only the slat–main pair. The main–flap
+  counts follow from its sub-block layout (step 4).
 - Lower landing points sit just aft of each nose, where surface curvature has
   dropped off.
 
@@ -316,7 +340,8 @@ block.
 
 - **C1 Matching counts:** the two bridges of each slot need the same number of
   points if a single H-block spans them, and so do the two lines of a channel.
-  The real counts come from the block layout, so sketch it first.
+  The real counts come from the block layout, so sketch it first. Step 1
+  matches the slat–main pair only (`--match slat`); see "Landing points".
 - **C2 Surface refinement by insertion only.** Fit one spline per element
   through the raw points, and **insert** new points on it. Never move or
   replace a raw point. Raw points then stay bit-identical (they are a subset),
