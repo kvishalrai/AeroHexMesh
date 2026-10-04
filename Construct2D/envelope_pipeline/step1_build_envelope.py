@@ -19,8 +19,13 @@ Curve order (i increasing, the XCUT convention):
     upper downstream line   (flap upper TE corner excluded -> far end)
 
 Every raw surface point on the curve is written bit-identical to the source
-file (no surface refinement yet; PLAN.md rule C2 adds it by insertion
-later). The two downstream ends stay open (no closure point). By default
+file. Surfaces are refined by insertion only (PLAN.md rule C2): points are
+added on per-element splines (split at sharp corners) so the spacing starts
+at the wall spacing y0 at every junction with a bridge or downstream line
+and grows at no more than --wall-growth. Bridges and downstream lines start
+from the same spacing, so the slot blocks resolve their walls and match the
+Construct2D mesh across every interface (PLAN.md C3/C4). y0 is computed
+exactly as Construct2D does from --ypls/--recd/--cfrc, which step 2 reuses. The two downstream ends stay open (no closure point). By default
 (--far-end free) the downstream lines leave along the flap TE bisector and
 turn onto a straight far section at --far-angle; this needs the open-cut
 fix in this repo's Construct2D (hyperbolic_surface_grid.f90). With
@@ -34,7 +39,8 @@ import argparse
 import os
 import numpy as np
 
-from env_common import (read_raw_element, write_curve_dat, write_meta,
+from env_common import (ElementSpline, raw_walk, refine_walk, wall_distance,
+                        read_raw_element, write_curve_dat, write_meta,
                         refuse_existing, unit, heading, turn_deg, seg_lengths,
                         vinokur, choose_bridge_count, sample_by_arclength,
                         hermite_dense, arc_length, geometric_growth_rate,
@@ -108,6 +114,21 @@ def main():
     ap.add_argument('--pull', type=float, default=1.0,
                     help='Hermite tangent length of the lower bridges, as a '
                          'fraction of the bridge chord (default 1.0)')
+    ap.add_argument('--ypls', type=float, default=1.0,
+                    help='y+ of the first cell (Construct2D YPLS; default 1)')
+    ap.add_argument('--recd', type=float, default=1.7e6,
+                    help='Reynolds number for y0 (Construct2D RECD; default 1.7e6, '
+                         'the 30P-30N BANC case)')
+    ap.add_argument('--cfrc', type=float, default=0.5,
+                    help='reference length for y0 (Construct2D CFRC; default 0.5)')
+    ap.add_argument('--wall-growth', type=float, default=1.15,
+                    help='max spacing growth along surfaces away from a junction '
+                         '(default 1.15)')
+    ap.add_argument('--refine', type=int, default=1,
+                    help='split every raw interval into at least this many parts '
+                         '(default 1: raw density away from junctions)')
+    ap.add_argument('--no-refine', action='store_true',
+                    help='raw surface points only (the old coarse envelope)')
     ap.add_argument('--rmax', type=float, default=1.2,
                     help='max neighbour spacing ratio on bridges (default 1.2)')
     ap.add_argument('--dsmax', type=float, default=0.005,
@@ -186,12 +207,44 @@ def main():
     def sp(a, i, j):
         return float(np.hypot(*(a[j] - a[i])))
 
+    # ---- refined surfaces ---------------------------------------------------
+    y0 = wall_distance(args.ypls, args.recd, args.cfrc)
+    esS = ElementSpline(S, True, [SLAT_TIP, SLAT_HOOK])
+    esM = ElementSpline(M, True, [MAIN_TE, MAIN_COVE_TOP, MAIN_COVE_BOT])
+    esF = ElementSpline(F, False, [])
+
+    def surface(es, idx):
+        if args.no_refine:
+            return es.pts[idx], list(range(len(idx)))
+        return refine_walk(es, idx, y0, args.wall_growth, args.refine)
+
+    surf = {
+        'flap_lower': ('flap', list(range(0, fl_land + 1)), esF),
+        'main_lower': ('main', raw_walk(nM, MAIN_COVE_BOT, ml_land, True), esM),
+        'slat_bottom_outer': ('slat', raw_walk(nS, SLAT_HOOK, SLAT_TIP, True), esS),
+        'main_upper': ('main', raw_walk(nM, mu_land, MAIN_TE, True), esM),
+        'flap_upper': ('flap', list(range(fu_land, nF)), esF),
+    }
+    spts, spos = {}, {}
+    for name, (elem, idx, es) in surf.items():
+        spts[name], spos[name] = surface(es, idx)
+    print(f"Wall spacing y0 = {y0:.3e} (y+ {args.ypls}, Re {args.recd:g}, "
+          f"cfrc {args.cfrc}); surfaces " + ("raw only" if args.no_refine else
+          f"refined: " + ", ".join(f"{k} {len(surf[k][1])}->{len(v)}"
+                                  for k, v in spts.items())))
+
+    def first_ds(name):
+        return float(np.hypot(*(spts[name][1] - spts[name][0])))
+
+    def last_ds(name):
+        return float(np.hypot(*(spts[name][-1] - spts[name][-2])))
+
     # ---- bridges -----------------------------------------------------------
     # Upper bridges: straight, landing at the chosen angle.
     up_slat = dict(P0=S[SLAT_TIP], P1=M[mu_land],
-                   ds0=sp(S, nS - 1, SLAT_TIP), ds1=sp(M, mu_land, mu_land + 1))
+                   ds0=last_ds('slat_bottom_outer'), ds1=first_ds('main_upper'))
     up_flap = dict(P0=M[MAIN_TE], P1=F[fu_land],
-                   ds0=sp(M, nM - 1, MAIN_TE), ds1=sp(F, fu_land, fu_land + 1))
+                   ds0=last_ds('main_upper'), ds1=first_ds('flap_upper'))
 
     # Lower bridges: Hermite, leaving the surface they start on at the chosen
     # angle (rotated ccw from the surface tangent, i.e. away from the nose
@@ -208,10 +261,10 @@ def main():
     lo_flap_dense = lower_dense(F[fl_land],
                                 rotate_deg(F[fl_land] - F[fl_land - 1], theta['flap-lower']),
                                 M[MAIN_COVE_BOT], M[MAIN_COVE_BOT + 1] - M[MAIN_COVE_BOT])
-    lo_slat = dict(L=arc_length(lo_slat_dense), ds0=sp(M, ml_land - 1, ml_land),
-                   ds1=sp(S, SLAT_HOOK, SLAT_HOOK + 1))
-    lo_flap = dict(L=arc_length(lo_flap_dense), ds0=sp(F, fl_land - 1, fl_land),
-                   ds1=sp(M, MAIN_COVE_BOT, MAIN_COVE_BOT + 1))
+    lo_slat = dict(L=arc_length(lo_slat_dense), ds0=last_ds('main_lower'),
+                   ds1=first_ds('slat_bottom_outer'))
+    lo_flap = dict(L=arc_length(lo_flap_dense), ds0=last_ds('flap_lower'),
+                   ds1=first_ds('main_lower'))
     for b in (up_slat, up_flap):
         b['L'] = float(np.hypot(*(b['P1'] - b['P0'])))
 
@@ -281,7 +334,7 @@ def main():
     center_dense = np.vstack([turn, straight[1:]])
     Lturn_arc = arc_length(turn)
     Lc = arc_length(center_dense)
-    d0 = min(sp(F, 0, 1), sp(F, FLAP_UPPER_TE - 1, FLAP_UPPER_TE))
+    d0 = min(first_ds('flap_lower'), last_ds('flap_upper'))
     nline = 2
     while geometric_growth_rate(Lc, d0, nline + 1) > args.line_growth:
         nline += 1
@@ -326,18 +379,18 @@ def main():
         pieces.append((name, np.asarray(pts, float), elem, idx))
 
     add('lower_line', lower_line[1:][::-1])
-    add('flap_lower', F[0:fl_land + 1], 'flap', list(range(0, fl_land + 1)))
+    def add_surf(name):
+        add(name, spts[name], surf[name][0], surf[name][1])
+
+    add_surf('flap_lower')
     add('bridge_flap_lower', lo_flap_pts[1:-1])
-    add('main_lower', M[MAIN_COVE_BOT:ml_land + 1], 'main',
-        list(range(MAIN_COVE_BOT, ml_land + 1)))
+    add_surf('main_lower')
     add('bridge_slat_lower', lo_slat_pts[1:-1])
-    slat_idx = list(range(SLAT_HOOK, nS)) + [SLAT_TIP]
-    add('slat_bottom_outer', S[slat_idx], 'slat', slat_idx)
+    add_surf('slat_bottom_outer')
     add('bridge_slat_upper', up_slat_pts[1:-1])
-    main_up_idx = list(range(mu_land, nM)) + [MAIN_TE]
-    add('main_upper', M[main_up_idx], 'main', main_up_idx)
+    add_surf('main_upper')
     add('bridge_flap_upper', up_flap_pts[1:-1])
-    add('flap_upper', F[fu_land:nF], 'flap', list(range(fu_land, nF)))
+    add_surf('flap_upper')
     add('upper_line', upper_line[1:])
 
     curve = np.vstack([p[1] for p in pieces])
@@ -352,7 +405,7 @@ def main():
         if elem is None:
             continue
         src = {'slat': S, 'main': M, 'flap': F}[elem]
-        if not np.array_equal(pts, src[idx]):
+        if not np.array_equal(pts[spos[name]], src[idx]):
             raise SystemExit(f"internal error: {name} is not bit-identical to source")
 
     # Bridge index ranges including their two surface endpoints (these are
@@ -474,8 +527,16 @@ def main():
             'main_cove': ['main', MAIN_TE, MAIN_COVE_BOT],
             'flap_nose': ['flap', fl_land, fu_land],
         },
-        'surface_source': {name: {'element': elem, 'source_indices': idx}
+        'surface_source': {name: {'element': elem, 'source_indices': idx,
+                                  'curve_positions': [ranges[name][0] + p
+                                                      for p in spos[name]]}
                            for name, _, elem, idx in pieces if elem is not None},
+        'refinement': {'y0': y0, 'ypls': args.ypls, 'recd': args.recd,
+                       'cfrc': args.cfrc, 'wall_growth': args.wall_growth,
+                       'refine': args.refine, 'no_refine': args.no_refine,
+                       'spline_corners': {'slat': [SLAT_TIP, SLAT_HOOK],
+                                          'main': [MAIN_TE, MAIN_COVE_TOP, MAIN_COVE_BOT],
+                                          'flap': []}},
         'junction_turns_deg': {k: turn_at(i1) for k, i1 in junctions.items()},
         'bridge_clearance_mid_half': clear,
         'warnings': warnings,
@@ -486,7 +547,8 @@ def main():
            ('bridge_slat_upper', 'bridge_slat_lower',
             'bridge_flap_upper', 'bridge_flap_lower')},
         'i_hook_tip': junctions['hook_tip'],
-        'i_slat_le': ranges['slat_bottom_outer'][0] + (SLAT_LE - SLAT_HOOK),
+        'i_slat_le': ranges['slat_bottom_outer'][0]
+                     + spos['slat_bottom_outer'][SLAT_LE - SLAT_HOOK],
         'i_slat_tip': junctions['slat_tip'],
         'i_main_te': junctions['main_te'],
         'i_cove_bottom_corner': junctions['cove_bottom_corner'],

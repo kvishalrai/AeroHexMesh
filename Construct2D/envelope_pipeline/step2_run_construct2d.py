@@ -52,12 +52,12 @@ def main():
     ap.add_argument('--jmax', type=int, default=100)
     ap.add_argument('--radi', type=float, default=15.0,
                     help='HYPR marches about 1.2 x RADI from the curve')
-    ap.add_argument('--ypls', type=float, default=1.0)
-    ap.add_argument('--recd', type=float, default=1.7e6,
-                    help='Reynolds number for the first-cell height (30P-30N '
-                         'BANC case: 1.71e6 on the stowed chord)')
-    ap.add_argument('--cfrc', type=float, default=0.5,
-                    help='chord fraction used in the y+ wall-distance estimate')
+    ap.add_argument('--ypls', type=float, default=None,
+                    help='default: from the step-1 meta (refinement.ypls), else 1.0')
+    ap.add_argument('--recd', type=float, default=None,
+                    help='default: from the step-1 meta, else 1.7e6')
+    ap.add_argument('--cfrc', type=float, default=None,
+                    help='default: from the step-1 meta, else 0.5')
     ap.add_argument('--alfa', type=float, default=1.0)
     ap.add_argument('--epsi', type=float, default=15.0)
     ap.add_argument('--epse', type=float, default=0.0)
@@ -82,6 +82,14 @@ def main():
 
     meta_in = os.path.splitext(args.curve)[0] + '.meta.json'
     meta = read_meta(meta_in) if os.path.exists(meta_in) else {}
+    # The first-cell height must match the y0 step 1 clustered the curve to.
+    ref = meta.get('refinement', {})
+    for k, dflt in (('ypls', 1.0), ('recd', 1.7e6), ('cfrc', 0.5)):
+        if getattr(args, k) is None:
+            setattr(args, k, ref.get(k, dflt))
+        elif k in ref and getattr(args, k) != ref[k]:
+            print(f"WARNING: --{k} {getattr(args, k)} differs from step 1's "
+                  f"{ref[k]}; the curve was clustered for a different y0")
     exe = os.path.abspath(args.construct2d)
     name = 'env'
 

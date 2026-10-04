@@ -1,7 +1,7 @@
 # Envelope pipeline for the 30P-30N three-element airfoil: plan
 
-Status: **steps 0–3 implemented and working on a coarse envelope (raw surface
-points, no refinement yet); steps 4–6 not started.** See "Progress" below.
+Status: **steps 0–3 implemented, with surface refinement (C2–C4) and the
+landing decision (θ = 22°); steps 4–6 not started.** See "Progress" below.
 First written 2026-10-04 as a
 handover so the work can continue with another agent; tightened the same day
 after checking it against the Construct2D source, the existing
@@ -71,6 +71,42 @@ What the first runs found (now built into the scripts):
   middle half of each upper bridge, the gap to the wall it lands on is only
   0.0017 (slat → main) and 0.0004 (main → flap). This settled the landing
   trade-off: default θ = 22° (see "Landing points").
+
+### Surface refinement (C2–C4), implemented 2026-10-04
+
+**Every bridge–surface junction must be clustered to the wall spacing y0 in
+both directions.** This is the link that was missing. Across a slot, the
+block cells next to the cove and nose walls are set by the point spacing
+along the bridges (the bridges are the block's ends). So every bridge
+must start and end at y0 (7.1e-6 for y+ = 1, Re = 1.7e6, CFRC 0.5).
+Construct2D sees those bridges as part of the envelope, so the surfaces
+next to each bridge end must also taper down to y0, or the spacing along
+the curve jumps 70–400×. The same holds at the flap TE corners for the
+downstream lines.
+
+Step 1 now does this by insertion only:
+- One cubic spline per element segment, split at the sharp corners (slat
+  tip and hook, main TE and both cove corners, flap TE), with chord-length
+  parameters. Inserted points lie on the spline inside their own raw
+  interval. Raw points are copied bit-for-bit (checked in step 1 and
+  again through the p3d in step 2).
+- Spacing plan per surface walk (`env_common.refine_walk`): march from the
+  start, splitting each raw interval into the fewest geometric
+  sub-intervals with ratio ≤ `--wall-growth` (1.15). The march is capped by
+  a backward march from the end, so it always arrives at y0 without a jump.
+  Simpler schemes (rounding per interval, two marches meeting in the middle,
+  smoothing) left ratio jumps of 1.3–2.0; this one keeps every walk ≤ 1.15.
+- Bridges and downstream lines start from the refined surface spacing next
+  to them. The y+ settings (`--ypls/--recd/--cfrc`) live in step 1, and
+  step 2 reads them from the meta file, so Construct2D's first cell is the
+  same y0.
+
+Result (θ = 22°): 2614 curve points (raw surfaces 429 → 2014), a max spacing
+ratio along the curve of 1.199, Construct2D in 16 s, 0 folded cells, and the
+wall row bit-identical. Worst cell angle 30°, out in the field about 0.9
+chord below the slat (j = 78), against 45.9° on the coarse curve. Max
+xi-growth is 1.199 at the wall and 1.29 for j ≤ 30. The xi-growth gate
+still fails in the outer field.
 
 ## Goal
 

@@ -220,3 +220,168 @@ def point_to_polyline_distance(P, poly):
         proj = a + t[:, None] * ab
         out[k] = np.min(np.hypot(*(p - proj).T))
     return out
+
+
+# ---------------------------------------------------------------------
+# Wall spacing (same estimate as Construct2D's surface_util.wall_distance)
+# ---------------------------------------------------------------------
+
+def wall_distance(yplus, Re, Lref):
+    """First-cell height Construct2D uses: turbulent flat-plate Cf estimate.
+    Lref is Construct2D's CFRC (chord fraction), not the chord."""
+    Cf = (2.0 * np.log10(Re) - 0.65) ** (-2.3)
+    return yplus * Lref / (Re * np.sqrt(0.5 * Cf))
+
+
+# ---------------------------------------------------------------------
+# Element splines and refinement by insertion (PLAN.md rule C2)
+# ---------------------------------------------------------------------
+
+class ElementSpline:
+    """Piecewise cubic splines through one element's raw points, split at
+    its sharp corners so no spline runs across a corner. Each piece uses
+    chord-length parameters and not-a-knot ends. Raw point k and k+1
+    (indices modulo n for a closed element) bound "interval k"; inserted
+    points come from the piece's spline inside that interval only, and the
+    raw points themselves are never re-evaluated or moved."""
+
+    def __init__(self, pts, closed, corners):
+        from scipy.interpolate import CubicSpline
+        self.pts = np.asarray(pts, float)
+        self.n = len(self.pts)
+        self.closed = closed
+        cs = sorted(set(corners))
+        if closed:
+            bounds = list(zip(cs, cs[1:] + [cs[0] + self.n]))
+        else:
+            cuts = sorted(set([0] + cs + [self.n - 1]))
+            bounds = list(zip(cuts[:-1], cuts[1:]))
+        self._interval = {}
+        for a, b in bounds:
+            ids = [k % self.n for k in range(a, b + 1)]
+            P = self.pts[ids]
+            t = np.concatenate([[0.0], np.cumsum(seg_lengths(P))])
+            if len(P) >= 4:
+                spl = CubicSpline(t, P, bc_type='not-a-knot')
+            else:
+                spl = None   # 2-3 points: straight segments
+            for m, k in enumerate(range(a, b)):
+                self._interval[k % self.n] = (spl, t[m], t[m + 1])
+
+    def interval_dense(self, k, nsamp=257):
+        """Dense samples of interval k -> k+1; exact raw end points."""
+        k = k % self.n
+        spl, t0, t1 = self._interval[k]
+        A, B = self.pts[k], self.pts[(k + 1) % self.n]
+        if spl is None:
+            w = np.linspace(0.0, 1.0, nsamp)[:, None]
+            d = A[None, :] * (1 - w) + B[None, :] * w
+        else:
+            d = spl(np.linspace(t0, t1, nsamp))
+        d[0], d[-1] = A, B
+        return d
+
+
+def raw_walk(n, start, end, closed):
+    """Raw indices from start to end going in increasing index order (with
+    wrap-around for a closed element)."""
+    if closed and end < start:
+        end += n
+    return [k % n for k in range(start, end + 1)]
+
+
+def _march(lengths, a0, growth, mmin, bound):
+    """Sub-interval plan for consecutive raw intervals, marching from the
+    start of a walk. Each interval of length l is split into m geometric
+    sub-intervals a*q, a*q^2, ..., a*q^m continuing from the previous
+    spacing a. m is the smallest count >= mmin such that q <= growth and
+    the last sub-interval is no larger than bound[i] (the largest spacing
+    at the interval's right end from which the walk's end can still be
+    reached shrinking by at most `growth` per cell)."""
+    plan, a = [], a0
+    for l, B in zip(lengths, bound):
+        m = mmin
+        while True:
+            q = _geom_ratio(l, a, m)
+            if (q <= growth and a * q ** m <= B * 1.000001) or m > 100000:
+                break
+            m += 1
+        plan.append((m, q, a))
+        a = a * q ** m
+    return plan
+
+
+def _geom_ratio(l, a, m):
+    """q with a*(q + q^2 + ... + q^m) = l."""
+    if m == 1:
+        return l / a
+    f = lambda q: a * q * (q ** m - 1.0) / (q - 1.0) - l if abs(q - 1.0) > 1e-12 \
+        else a * m - l
+    lo, hi = 1e-6, 10.0
+    while f(hi) < 0:
+        hi *= 2.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if f(mid) > 0:
+            hi = mid
+        else:
+            lo = mid
+    return 0.5 * (lo + hi)
+
+
+def refine_walk(es, idx, y0, growth, refine=1):
+    """Points along the raw walk idx (consecutive raw indices of spline es),
+    with points inserted so the spacing starts at y0 at BOTH ends and grows
+    at no more than `growth` until it reaches the raw spacing (every raw
+    interval split into at least `refine` equal parts in the bulk).
+
+    For a cluster point inside a wall (e.g. a cove corner), refine the two
+    walks on either side of it separately.
+
+    Returns (points, raw_pos): raw_pos[m] is the position in points of raw
+    idx[m]. Raw points are copied bit-for-bit; inserted points lie on the
+    element spline inside their raw interval."""
+    idx = list(idx)
+    dense = [es.interval_dense(k) for k in idx[:-1]]
+    L = np.array([float(np.sum(seg_lengths(d))) for d in dense])
+    S = np.concatenate([[0.0], np.cumsum(L)])
+    # Spacing cap at each interval's right end: the spacing a march from the
+    # END of the walk reaches at that raw point (in whole sub-intervals, at
+    # most `growth` per cell). Following the forward march under this cap
+    # guarantees the end can still be reached at y0 without a jump.
+    back = _march(L[::-1], y0 / growth, growth, refine, np.full(len(L), np.inf))
+    back_sp = [a * q ** m for m, q, a in back]       # spacing after each step
+    bound = np.empty(len(L))
+    bound[-1] = y0
+    bound[:-1] = [back_sp[len(L) - 2 - i] for i in range(len(L) - 1)]
+    nI = len(L)
+    plan = _march(L, y0 / growth, growth, refine, bound)
+    subs = [a * q ** np.arange(1, m + 1) for m, q, a in plan]
+    st = [0.0]
+    fixed = [True]
+    for m in range(nI):
+        sub = subs[m] * (L[m] / subs[m].sum())
+        st.extend(S[m] + np.cumsum(sub)[:-1])
+        fixed.extend([False] * (len(sub) - 1))
+        st.append(S[m + 1])
+        fixed.append(True)
+    st = np.array(st)
+    fixed = np.array(fixed)
+    out = [es.pts[idx[0]]]
+    raw_pos = [0]
+    j = 1
+    for m in range(nI):
+        d = dense[m]
+        arc = np.concatenate([[0.0], np.cumsum(seg_lengths(d))])
+        ins = []
+        while not fixed[j]:
+            ins.append(st[j] - S[m])
+            j += 1
+        if ins:
+            ins = np.array(ins) * (arc[-1] / L[m])
+            out.extend(np.column_stack([np.interp(ins, arc, d[:, 0]),
+                                        np.interp(ins, arc, d[:, 1])]))
+        out.append(es.pts[idx[m + 1]])
+        raw_pos.append(len(out) - 1)
+        j += 1
+    return np.array(out), raw_pos
