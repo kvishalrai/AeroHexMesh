@@ -67,6 +67,16 @@ module vardef
                                     !  airfoil surface. 0.0 = off (default,
                                     !  corners stay sharp, exactly as
                                     !  loaded)
+    double precision :: xdamp       ! CGRD "XCUT" variant only (nwake == 0):
+                                    !  per-level damping strength pulling the
+                                    !  i=1/imax trailing-edge cut column back
+                                    !  toward the TE x-location, without
+                                    !  pinning it outright (which destabilizes
+                                    !  the hyperbolic marcher). 0.0 = no pull
+                                    !  (default); larger values pull harder.
+                                    !  Keeps the same stable Delx-relative-to-
+                                    !  neighbor coupling, just nudges the
+                                    !  target offset each step.
     double precision :: fdst        ! Farfield spacing parameter for O-
                                     !  grid. 1.0: uniform. > 1.0: clustered
                                     !  near trailing edge.

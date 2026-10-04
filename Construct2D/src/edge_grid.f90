@@ -313,9 +313,15 @@ subroutine add_wake_points(grid, options)
   type(srf_grid_type), intent(inout) :: grid
   type(options_type), intent(in) :: options
 
-  integer i, srf1, srf2 
+  integer i, srf1, srf2
   double precision d0, g1, length, space
   double precision, dimension(2) :: wakevec
+
+! XCUT variant: zero wake points means i=1/i=imax ARE the trailing-edge
+! corner points themselves (already loaded from the airfoil surface just
+! above), so there is nothing to add here -- leave them untouched.
+
+  if (options%nwake == 0) return
 
 ! Boundary wake points
 
@@ -560,6 +566,14 @@ subroutine create_farfield(grid, options)
 
     end do
 
+  elseif (options%nwake == 0) then
+
+!   C-grid "XCUT" variant: no wake strip at all, so there is no back-wall
+!   section to build -- just a single arc from directly below the TE to
+!   directly above it. See create_farfield_xcut.
+
+    call create_farfield_xcut(grid, options)
+
   else
 
 !   C-grid shape
@@ -648,6 +662,86 @@ subroutine create_farfield(grid, options)
   end if
 
 end subroutine create_farfield
+
+!=============================================================================80
+!
+! Builds the C-grid farfield (j = jmax) boundary for the "XCUT" CGRD variant
+! (options%nwake == 0): a single circular arc, centered at mid-chord (the
+! same convention the O-grid farfield uses), swept the long way around
+! (through the leading-edge side) from whatever direction i=1 sits in to
+! whatever direction i=imax sits in. There is no separate wake/back-wall
+! section -- with zero wake points, i=1 and i=imax are just the two ends of
+! whatever curve was loaded (which may already include prescribed wake-line
+! extensions well downstream of the trailing edge, not just the bare
+! airfoil), so the arc simply has to enclose that curve and hand off
+! smoothly at its two ends. options%radi must be large enough to stay
+! outside the loaded curve at every point, including any downstream
+! extensions.
+!
+!=============================================================================80
+subroutine create_farfield_xcut(grid, options)
+
+  Use vardef, only : srf_grid_type, options_type
+
+  type(srf_grid_type), intent(inout) :: grid
+  type(options_type), intent(in) :: options
+
+  integer i, imax, jmax, ncell, ile
+  double precision pi, phi, ang, ang1, ang2, sweep, d0, lhalf, space, xc, yc
+
+  pi = acos(-1.d0)
+  imax = grid%imax
+  jmax = grid%jmax
+  ncell = imax - 1
+
+! Center of the arc: the leading edge itself, read directly off the loaded
+! curve, rather than an assumed mid-chord at (0.5, 0). That assumption only
+! holds if the curve has already been translated/rescaled to LE-at-origin,
+! unit-chord (transform_airfoil's job) -- which is exactly what is skipped
+! for this XCUT variant (see the "Translate and scale buffer airfoil" gate
+! in menu.f90), and never true at all once the curve includes prescribed
+! wake-line extensions well downstream of the TE. minval(x) over the loaded
+! curve is always the leading edge regardless of scale/position/wake
+! extensions (the wake only ever extends in +x, never past the LE), so this
+! works unconditionally.
+
+  ile = minloc(grid%x(1:imax,1), 1)
+  xc = grid%x(ile,1)
+  yc = grid%y(ile,1)
+
+! Starting/ending angles: directions from the center to the two ends of the
+! loaded curve (i=1, i=imax)
+
+  ang1 = atan2(grid%y(1,1) - yc, grid%x(1,1) - xc)
+  ang2 = atan2(grid%y(imax,1) - yc, grid%x(imax,1) - xc)
+
+! Total sweep the long way around (through the leading-edge side): decreasing
+! angle from ang1, wrapping through +/-pi, up to ang2
+
+  sweep = ang1 - ang2
+  if (sweep <= 0.d0) sweep = sweep + 2.d0*pi
+
+  lhalf = sweep*options%radi
+  d0 = lhalf/(options%fdst*dble(ncell))
+
+  phi = 0.d0
+  grid%x(1,jmax) = xc + options%radi*cos(ang1)
+  grid%y(1,jmax) = yc + options%radi*sin(ang1)
+  do i = 2, imax
+    if (options%fdst > 1.d0) then
+      call normal_spacing(space, lhalf, i-1, ncell, d0)
+    elseif (options%fdst < 1.d0) then
+      call inv_normal_spacing(space, lhalf, i-1, ncell, d0)
+    else
+      space = lhalf/dble(ncell)
+    end if
+    phi = phi + space/options%radi
+    ang = ang1 - phi
+    grid%x(i,jmax) = xc + options%radi*cos(ang)
+    grid%y(i,jmax) = yc + options%radi*sin(ang)
+  end do
+
+end subroutine create_farfield_xcut
 
 !=============================================================================80
 !

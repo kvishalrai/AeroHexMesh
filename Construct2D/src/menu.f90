@@ -42,11 +42,12 @@ subroutine set_defaults(options, surf, filename)
 
   integer nsrf, tept, jmax, nwke, stp1, stp2, nrmt, nrmb, gdim, npln, asmt
   double precision lesp, tesp, radi, ypls, recd, fdst, fwkl, fwki, nwki,      &
-                   rtef, dpln, alfa, epsi, epse, funi, uni, cfrc
+                   rtef, xdamp, dpln, alfa, epsi, epse, funi, uni, cfrc
   logical f3dm
   character(300) :: name
   character(4) :: topo, slvr
-  namelist /SOPT/ nsrf, lesp, tesp, radi, nwke, fdst, fwkl, fwki, nwki, rtef
+  namelist /SOPT/ nsrf, lesp, tesp, radi, nwke, fdst, fwkl, fwki, nwki, rtef, &
+                  xdamp
   namelist /VOPT/ name, jmax, slvr, topo, ypls, recd, stp1, stp2, nrmt, nrmb,  &
                   alfa, epsi, epse, funi, asmt, cfrc
   namelist /OOPT/ gdim, npln, dpln, f3dm
@@ -64,6 +65,7 @@ subroutine set_defaults(options, surf, filename)
   fwki = 10.d0
   nwki = 1.d0
   rtef = 0.d0
+  xdamp = 0.d0
   name = options%project_name
   jmax = 100
   slvr = 'HYPR'
@@ -132,6 +134,7 @@ subroutine set_defaults(options, surf, filename)
   options%fwki = fwki
   options%nwki = nwki
   options%rtef = rtef
+  options%xdamp = xdamp
   options%yplus = ypls
   options%Re = recd
   options%cfrac = cfrc
@@ -419,8 +422,22 @@ subroutine run_command(command, surf, options, done, ioerror)
       end do
 
 !     Translate and scale buffer airfoil
+!
+!     XCUT variant (nwake == 0, either topology): skip this. transform_airfoil
+!     translates by minval(x) and rescales by 0.5*(x(1)+x(npoint)), assuming
+!     the array's first/last points sit at the trailing edge -- true for a
+!     normal airfoil, but for the "whole curve" (airfoil + prescribed wake-
+!     line extensions) i=1/imax sit wherever the wake lines end (e.g. far
+!     downstream), not at the TE, so this would silently rescale the entire
+!     curve by that (wrong) distance instead of leaving it untouched. This
+!     is independent of topology -- surf%x(1)/surf%x(npoint) are wrong as a
+!     TE reference under OGRD exactly the same way they are under CGRD, so
+!     (since topology is always one or the other) the condition simplifies
+!     to nwake == 0 alone.
 
-      call transform_airfoil(surf%x, surf%y)
+      if (options%nwake /= 0) then
+        call transform_airfoil(surf%x, surf%y)
+      end if
 
       if (gengrid) then
         if (whichgrid == 'SMTH') then
@@ -475,7 +492,8 @@ subroutine run_command(command, surf, options, done, ioerror)
 
 !         Reset nsrf if user has changed it; must match airfoil geometry
 
-          if (surf%tegap) then
+          if (surf%tegap .and. .not. (options%topology == 'CGRD' .and.        &
+                                       options%nwake == 0)) then
             options%nsrf = surf%npoints + options%nte + 1
             write(*,*)
             write(*,*) "Error: trailing edge gap detected. Buffer airfoil "    &
@@ -483,6 +501,11 @@ subroutine run_command(command, surf, options, done, ioerror)
             write(*,*) "to use BUFF option."
             stop
           else
+
+!           XCUT variant (CGRD, nwake == 0) keeps a real TE gap on purpose --
+!           the two corner points stay distinct, no fillet is applied, so
+!           nsrf is simply the raw point count either way.
+
             options%nsrf = surf%npoints
           end if
 
@@ -499,10 +522,11 @@ subroutine run_command(command, surf, options, done, ioerror)
           newsurf%y = surf%y
 
 !         Locally round sharp TE corners if requested (closed-loop airfoils
-!         only; surf%tegap is already forced .false. above, else we would
+!         only; surf%tegap is already forced .false. above -- or this is the
+!         XCUT variant, which keeps a real gap on purpose -- else we would
 !         have stopped)
 
-          if (options%rtef > 0.d0) then
+          if ((.not. newsurf%tegap) .and. options%rtef > 0.d0) then
             call round_te_corners(newsurf, options%rtef)
             options%nsrf = newsurf%npoints
           end if

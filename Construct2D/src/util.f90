@@ -389,7 +389,7 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') grid%x(i,j)
+      write(iunit,'(es25.16)') grid%x(i,j)
     end do
     end do
     end do
@@ -397,7 +397,7 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') dble(k-1)*deltplane
+      write(iunit,'(es25.16)') dble(k-1)*deltplane
     end do
     end do
     end do
@@ -405,14 +405,14 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') grid%y(i,j)
+      write(iunit,'(es25.16)') grid%y(i,j)
     end do
     end do
     end do
 
   else
 
-    write(iunit,'(es17.8)')                                                    &
+    write(iunit,'(es25.16)')                                                    &
          ((grid%x(i,j), i=imax,1,-1), j=1,jmax),                               &
          ((grid%y(i,j), i=imax,1,-1), j=1,jmax),                               &
          ((0.0, i=imax,1,-1), j=1,jmax)
@@ -464,7 +464,7 @@ subroutine write_quality_stats(iunit, qstats, griddim, nplanes)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') qstats%skewang(i,j)
+      write(iunit,'(es25.16)') qstats%skewang(i,j)
     end do
     end do
     end do
@@ -472,7 +472,7 @@ subroutine write_quality_stats(iunit, qstats, griddim, nplanes)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') qstats%growthz(i,j)
+      write(iunit,'(es25.16)') qstats%growthz(i,j)
     end do
     end do
     end do
@@ -480,14 +480,14 @@ subroutine write_quality_stats(iunit, qstats, griddim, nplanes)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') qstats%growthn(i,j)
+      write(iunit,'(es25.16)') qstats%growthn(i,j)
     end do
     end do
     end do
 
   else
 
-    write(iunit,'(es17.8)')                                                    &
+    write(iunit,'(es25.16)')                                                    &
          ((qstats%skewang(i,j), i=imax,1,-1), j=1,jmax),                       &
          ((qstats%growthz(i,j), i=imax,1,-1), j=1,jmax),                       &
          ((qstats%growthn(i,j), i=imax,1,-1), j=1,jmax)

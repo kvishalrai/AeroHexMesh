@@ -68,8 +68,15 @@ subroutine create_grid(foil, options, smooth)
   srf2 = grid%surfbounds(2)
 
 ! Add points to blunt trailing edge
+!
+! Exception: CGRD with options%nwake == 0 is the "XCUT" variant, where the
+! two trailing-edge corner points are kept distinct on purpose (each becomes
+! a hyperbolic-marching boundary column clamped to the TE x-location -- see
+! hyperbolic_surface_grid.f90) instead of being merged/rounded into one
+! point by fillet_trailing_edge.
 
-  if (foil%tegap) then
+  if (foil%tegap .and. .not. (options%topology == 'CGRD' .and.                &
+                               options%nwake == 0)) then
     call fillet_trailing_edge(foil, options%nte, grid%surfbounds)
   end if
 
@@ -210,12 +217,18 @@ subroutine copy_edges(grid, topology)
 
   elseif (topology == 'CGRD') then
 
-    do i = 1, srf1
-      grid%x(imax-i+1,1) = grid%x(i,1)
-      grid%y(imax-i+1,1) = grid%y(i,1)
-    end do
+!   XCUT variant (srf1 == 1, i.e. options%nwake == 0): i=1 and i=imax are
+!   the two independent trailing-edge corner points themselves, not a
+!   pair of wake points that should coincide -- skip the mirror copy.
 
-  end if 
+    if (srf1 > 1) then
+      do i = 1, srf1
+        grid%x(imax-i+1,1) = grid%x(i,1)
+        grid%y(imax-i+1,1) = grid%y(i,1)
+      end do
+    end if
+
+  end if
 
 end subroutine copy_edges
 

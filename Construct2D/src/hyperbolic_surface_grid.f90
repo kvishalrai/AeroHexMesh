@@ -385,6 +385,11 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
       case ('CGRD')
 
 !       Constant plane boundary: Delx = 0, Dely(i=1) = Dely(i=2)
+!
+!       (XCUT variant, options%nwake == 0: for now this keeps the original,
+!       unpinned relative-offset treatment at i=1/imax -- see the RHS branch
+!       below for the not-yet-active hook to reintroduce a softer, damped
+!       pull toward the trailing-edge x-location instead of a hard clamp.)
 
         if (i == 1) then
 
@@ -462,7 +467,29 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
 
         if (i == 1) then
 
+!         XCUT variant (options%nwake == 0): instead of freezing the
+!         relative offset Delx = x(1) - x(2) at its initial value (which
+!         lets the cut drift arbitrarily far from the TE x-location as the
+!         marching proceeds), nudge that offset a little further toward
+!         "x(1) = TE x-location" at every level. This keeps exactly the
+!         same LHS coupling to the neighbor that makes the plain Delx=0
+!         scheme stable -- only the RHS target shifts -- so unlike a hard
+!         Dirichlet pin, it should not destabilize the marcher.
+
           rhsvec1(1) = rhsvec1(1) - grid%x(2,j)
+          if (options%nwake == 0 .and. options%xdamp > 0.d0) then
+
+!           A constant pull compounds over many marching levels and
+!           destabilizes the far-field region (tested and confirmed).
+!           Decay it toward zero as j grows, so it only acts near the wall
+!           -- exactly where we most want the cut held close to the TE
+!           x-location -- and leaves the already-stable far-field behavior
+!           (plain Delx=0) untouched.
+
+            rhsvec1(1) = rhsvec1(1) - options%xdamp *                         &
+                         exp(-4.d0*dble(j-1)/dble(grid%jmax-1)) *             &
+                         (grid%x(i,j) - grid%x(1,1))
+          end if
           rhsvec1(2) = rhsvec1(2) - grid%y(2,j)
           rhsvec2(:) = 0.d0
           rhsvec3(:) = 0.d0
