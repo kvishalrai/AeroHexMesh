@@ -75,6 +75,19 @@ read this instead of re-detecting anything).
 Load the step-1 `.dat` in Construct2D and run **CGRD + NWKE=0 + BUFF**
 as usual. This writes the raw `.p3d`/`.nmf`.
 
+**Open-curve alternative (no trimming).** Pass `--open` to step 1 to
+leave out the `(Lfar, 0.0)` closure point: the curve then starts and ends
+at the two wake-line tips. In step 2 Construct2D asks once to confirm CGRD
+for this open curve; answer `y`. Then run step 3 with `--nelm-clean 0`
+(nothing to trim; it still writes the correct `.nmf`), and steps 4–5 as
+usual. Construct2D's own `.nmf` for an open curve is not valid (it welds
+i=1 to i=imax), which is why step 3 must still run. This needs this
+repo's Construct2D, whose hyperbolic marcher handles an open cut (the two
+wake-tip columns are marched independently). Compared with
+closed-then-trimmed on OAT15 (Lfar=20, nwake=50, spline wake), the
+near-wall mesh is the same, and the outflow cut columns come out nearly
+vertical instead of bending inward.
+
 **Step 3 — trim the wake-tip closure** (`step3_trim_mesh.py`)
 
 ```

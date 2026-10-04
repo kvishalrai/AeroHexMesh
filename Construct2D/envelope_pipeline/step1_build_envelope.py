@@ -20,9 +20,12 @@ Curve order (i increasing, the XCUT convention):
 
 Every raw surface point on the curve is written bit-identical to the source
 file (no surface refinement yet; PLAN.md rule C2 adds it by insertion
-later). The two downstream ends stay open (no closure point), and end as exact
-mirror images about y=0, which Construct2D's C-grid hyperbolic marcher
-requires (see the downstream-lines comment in main()).
+later). The two downstream ends stay open (no closure point). By default
+(--far-end free) the downstream lines leave along the flap TE bisector and
+turn onto a straight far section at --far-angle; this needs the open-cut
+fix in this repo's Construct2D (hyperbolic_surface_grid.f90). With
+--far-end mirror they instead turn back onto y=0 and end as exact mirror
+images about y=0, which older XCUT builds require.
 
 Usage:
     python3 step1_build_envelope.py --out ../sample_airfoils/30p30n_envelope_v1.dat
@@ -93,9 +96,18 @@ def main():
                     help='do not force equal counts on the two bridges of a slot')
     ap.add_argument('--xfar', type=float, default=20.0,
                     help='x where the downstream lines end (default 20)')
-    ap.add_argument('--turn-length', type=float, default=2.0,
-                    help='x-distance over which the downstream centerline turns '
-                         'from the flap TE bisector onto y=0 (default 2.0)')
+    ap.add_argument('--far-end', choices=['free', 'mirror'], default='free',
+                    help="free: straight far section at --far-angle, lines are "
+                         "exact translates (needs this repo's open-cut "
+                         "Construct2D fix). mirror: far ends at (xfar, -/+h), "
+                         "for XCUT builds without the fix (default free)")
+    ap.add_argument('--far-angle', type=float, default=0.0,
+                    help='free mode: direction of the straight far section, '
+                         'deg (default 0)')
+    ap.add_argument('--turn-length', type=float, default=None,
+                    help='length over which the downstream centerline turns from '
+                         'the flap TE bisector to the far direction (default '
+                         '1.0 free, 2.0 mirror)')
     ap.add_argument('--line-growth', type=float, default=1.15,
                     help='max geometric growth on the downstream lines (default 1.15)')
     ap.add_argument('--max-concave', type=float, default=30.0,
@@ -181,25 +193,37 @@ def main():
                                               lo_flap['ds0'], lo_flap['ds1']))
 
     # ---- downstream lines --------------------------------------------------
-    # Construct2D's C-grid hyperbolic marcher only solves i=1..imax-1 and sets
-    # column imax to the mirror image of column 1 about y=0, at every level
-    # (solve_hyperbolic_system: x(imax)=x(1), y(imax)=-y(1)). So the two far
-    # ends must be exact mirror images, (xfar, -h) and (xfar, +h). The
-    # centerline therefore turns from the flap TE bisector back onto y=0 and
-    # runs straight along y=0 to xfar, and the offset between the two lines
-    # rotates smoothly from the TE gap vector g/2 to (0, |g|/2) over the turn.
-    # Both lines share the centerline's point distribution exactly.
+    # One centerline from the flap TE midpoint along the TE bisector, a
+    # Hermite turn onto the far direction, then straight to x = xfar. Both
+    # lines share the centerline's point distribution exactly.
+    #
+    # free:   lines = centerline -/+ g/2 (exact translates; g = TE gap
+    #         vector). Needs the open-cut fix in this repo's Construct2D,
+    #         which marches i=1 and i=imax independently.
+    # mirror: the far direction is +x along y=0, and the offset rotates
+    #         smoothly from g/2 to (0, |g|/2), so the far ends are exact
+    #         mirror images (xfar, -/+h). Without the open-cut fix the C-grid
+    #         marcher sets column imax to the mirror of column 1 about y=0 at
+    #         every level, so only this shape meshes cleanly there.
     g = F[FLAP_UPPER_TE] - F[FLAP_LOWER_TE]
     h = 0.5 * float(np.hypot(*g))
     Pm = 0.5 * (F[FLAP_LOWER_TE] + F[FLAP_UPPER_TE])
     t0 = unit(unit(F[FLAP_LOWER_TE] - F[1]) + unit(F[FLAP_UPPER_TE] - F[FLAP_UPPER_TE - 1]))
-    efar = np.array([1.0, 0.0])
-    P1 = np.array([Pm[0] + args.turn_length, 0.0])
-    if args.xfar <= P1[0]:
+    mirror = args.far_end == 'mirror'
+    Lturn = args.turn_length if args.turn_length is not None else (2.0 if mirror else 1.0)
+    if mirror:
+        efar = np.array([1.0, 0.0])
+        P1 = np.array([Pm[0] + Lturn, 0.0])
+    else:
+        efar = np.array([np.cos(np.radians(args.far_angle)),
+                         np.sin(np.radians(args.far_angle))])
+        P1 = Pm + 0.5 * Lturn * (t0 + efar)
+    if args.xfar <= P1[0] or efar[0] <= 0:
         raise SystemExit("--xfar must lie downstream of the turn section")
     Lt = float(np.hypot(*(P1 - Pm)))
     turn = hermite_dense(Pm, P1, t0, efar, Lt, Lt)
-    straight = np.column_stack([np.linspace(P1[0], args.xfar, 2000), np.zeros(2000)])
+    Lstraight = (args.xfar - P1[0]) / efar[0]
+    straight = P1[None, :] + np.linspace(0.0, Lstraight, 2000)[:, None] * efar[None, :]
     center_dense = np.vstack([turn, straight[1:]])
     Lturn_arc = arc_length(turn)
     Lc = arc_length(center_dense)
@@ -211,25 +235,35 @@ def main():
     s = np.concatenate([[0.0], np.cumsum(d0 * rline ** np.arange(nline))])
     s[-1] = Lc
     center = sample_by_arclength(center_dense, s)
-    in_straight = s >= Lturn_arc
-    center[in_straight, 1] = 0.0          # exactly on y=0 (interpolation noise)
-    center[-1] = [args.xfar, 0.0]
-    w = np.clip(s / Lturn_arc, 0.0, 1.0)
-    w = w * w * (3.0 - 2.0 * w)            # smoothstep
-    gdir = unit(g)
-    odir = (1.0 - w)[:, None] * gdir[None, :] + w[:, None] * np.array([0.0, 1.0])[None, :]
-    odir /= np.hypot(*odir.T)[:, None]
-    off = h * odir
-    off[in_straight] = [0.0, h]
+    if mirror:
+        in_straight = s >= Lturn_arc
+        center[in_straight, 1] = 0.0          # exactly on y=0 (interpolation noise)
+        center[-1] = [args.xfar, 0.0]
+        w = np.clip(s / Lturn_arc, 0.0, 1.0)
+        w = w * w * (3.0 - 2.0 * w)            # smoothstep
+        odir = ((1.0 - w)[:, None] * unit(g)[None, :]
+                + w[:, None] * np.array([0.0, 1.0])[None, :])
+        odir /= np.hypot(*odir.T)[:, None]
+        off = h * odir
+        off[in_straight] = [0.0, h]
+    else:
+        off = np.tile(0.5 * g, (len(center), 1))
     lower_line = center - off   # starts (to round-off) at the flap lower TE corner
     upper_line = center + off   # starts at the flap upper TE corner
-    lower_line[-1] = [args.xfar, -h]
-    upper_line[-1] = [args.xfar, h]
-    print(f"Downstream lines: {nline} intervals each, growth {rline:.4f}, "
-          f"first step {d0:.3e}; centerline dips to y={center[:, 1].min():.4f}, "
-          f"reaches y=0 at x={P1[0]:.3f}; far ends ({args.xfar}, -/+{h:.6f})")
-    if lower_line[-1][0] != upper_line[-1][0] or lower_line[-1][1] != -upper_line[-1][1]:
-        raise SystemExit("internal error: far ends are not exact mirror images")
+    if mirror:
+        lower_line[-1] = [args.xfar, -h]
+        upper_line[-1] = [args.xfar, h]
+        if lower_line[-1][0] != upper_line[-1][0] or lower_line[-1][1] != -upper_line[-1][1]:
+            raise SystemExit("internal error: far ends are not exact mirror images")
+    dc = np.diff(center, axis=0)
+    gap_n = np.abs(dc[:, 0] * (upper_line - lower_line)[1:, 1]
+                   - dc[:, 1] * (upper_line - lower_line)[1:, 0]) / seg_lengths(center)
+    print(f"Downstream lines ({args.far_end}): {nline} intervals each, growth "
+          f"{rline:.4f}, first step {d0:.3e}; centerline y range "
+          f"{center[:, 1].min():.4f}..{center[:, 1].max():.4f}; normal gap "
+          f"{gap_n.min():.5f}..{gap_n.max():.5f}; far ends "
+          f"({lower_line[-1][0]:.4f}, {lower_line[-1][1]:.4f}) / "
+          f"({upper_line[-1][0]:.4f}, {upper_line[-1][1]:.4f})")
 
     # ---- assemble ---------------------------------------------------------
     pieces = []   # (name, points, source element, source index list or None)
@@ -375,8 +409,10 @@ def main():
             ('slat_upper', up_slat), ('slat_lower', lo_slat),
             ('flap_upper', up_flap), ('flap_lower', lo_flap))},
         'downstream_lines': {'intervals': nline, 'growth': rline, 'first_step': d0,
-                             'te_gap_vector': g.tolist(), 'far_half_gap': h,
-                             'turn_end_x': float(P1[0])},
+                             'far_end': args.far_end, 'turn_length': Lturn,
+                             'te_gap_vector': g.tolist(),
+                             'far_ends': [lower_line[-1].tolist(),
+                                          upper_line[-1].tolist()]},
         'block_walls_source': {
             'slat_cove': ['slat', SLAT_TIP, SLAT_HOOK],
             'main_nose': ['main', ml_land, mu_land],

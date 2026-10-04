@@ -37,13 +37,31 @@ subroutine hyperbolic_grid(grid, options)
   type(srf_grid_type), intent(inout) :: grid
   type(options_type), intent(in) :: options
 
-  integer :: j, imax, jmax
-  double precision, dimension(2*grid%imax-2,2*grid%imax-2) :: LHS
-  double precision, dimension(2*grid%imax-2) :: RHS
+  integer :: j, imax, jmax, nsys
+  double precision, dimension(:,:), allocatable :: LHS
+  double precision, dimension(:), allocatable :: RHS
   double precision, dimension(grid%imax) :: area
+  logical :: open_cut
 
   imax = grid%imax
   jmax = grid%jmax
+
+! XCUT variant with an open cut (CGRD, nwake == 0, and the curve's two ends
+! are distinct points): i=1 and i=imax are marched independently, each as
+! a constant-offset copy of its own neighbor column, so the system includes
+! point imax. Otherwise (normal C-grid, or an XCUT curve closed with one
+! shared far-end point) the original treatment is kept unchanged: the
+! system stops at imax-1 and column imax is the mirror of column 1 about
+! y = 0.
+
+  open_cut = (trim(options%topology) == 'CGRD' .and. options%nwake == 0 .and. &
+              (grid%x(1,1) /= grid%x(imax,1) .or. grid%y(1,1) /= grid%y(imax,1)))
+  if (open_cut) then
+    nsys = 2*imax
+  else
+    nsys = 2*imax - 2
+  end if
+  allocate(LHS(nsys,nsys), RHS(nsys))
 
   write(*,*)
   write(*,*) 'Growing hyperbolic grid ... '
@@ -65,17 +83,20 @@ subroutine hyperbolic_grid(grid, options)
 
 !   Inverse metrics at known level
 
-    call known_inverse_metrics(grid, area, imax, j, options%topology)
+    call known_inverse_metrics(grid, area, imax, j, options%topology, open_cut)
 
 !   Construct block tridiagonal system
 
-    call hyperbolic_system(LHS, RHS, grid, options, area, j)
+    call hyperbolic_system(LHS, RHS, grid, options, area, j, open_cut)
 
 !   Solve system for next level
 
-    call solve_hyperbolic_system(grid, LHS, RHS, j, imax, options%topology)
+    call solve_hyperbolic_system(grid, LHS, RHS, j, imax, options%topology,   &
+                                 open_cut)
 
   end do
+
+  deallocate(LHS, RHS)
 
 ! Enforce proper point spacings in normal direction
 
@@ -253,21 +274,27 @@ end subroutine specify_hyperbolic_area
 ! Subroutine to get inverse metrics at known level for hyperbolic grid
 !
 !=============================================================================80
-subroutine known_inverse_metrics(grid, area, imax, j, topology)
+subroutine known_inverse_metrics(grid, area, imax, j, topology, open_cut)
 
   Use vardef,    only : srf_grid_type
-  Use math_deps, only : derv1c, derv1f
+  Use math_deps, only : derv1b, derv1c, derv1f
 
   type(srf_grid_type), intent(inout) :: grid
   double precision, dimension(:), intent(in) :: area
   integer, intent(in) :: imax, j
   character(*), intent(in) :: topology
+  logical, intent(in) :: open_cut
 
-  integer :: i
+  integer :: i, ilast
 
-! Don't need to compute these at i = imax because it is set via bc
+! Not needed at i = imax when it is set via the mirror bc. With an open cut,
+! i = imax has its own (boundary) row in the system, so compute it too
+! (one-sided), which keeps every term of that row finite.
 
-  do i = 1, imax - 1
+  ilast = imax - 1
+  if (open_cut) ilast = imax
+
+  do i = 1, ilast
 
     if (i == 1) then
       if (trim(topology) == 'OGRD') then
@@ -277,6 +304,9 @@ subroutine known_inverse_metrics(grid, area, imax, j, topology)
         call derv1f(grid%x(i+1,j), grid%x(i,j), 1.d0, grid%xz(i,j))
         call derv1f(grid%y(i+1,j), grid%y(i,j), 1.d0, grid%yz(i,j))
       end if
+    elseif (i == imax) then
+      call derv1b(grid%x(i-1,j), grid%x(i,j), 1.d0, grid%xz(i,j))
+      call derv1b(grid%y(i-1,j), grid%y(i,j), 1.d0, grid%yz(i,j))
     else
       call derv1c(grid%x(i+1,j), grid%x(i-1,j), 1.d0, grid%xz(i,j))
       call derv1c(grid%y(i+1,j), grid%y(i-1,j), 1.d0, grid%yz(i,j))
@@ -296,7 +326,7 @@ end subroutine known_inverse_metrics
 ! Sets up the block tridiagonal system for hyperbolic grid generation
 !
 !=============================================================================80
-subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
+subroutine hyperbolic_system(LHS, RHS, grid, options, area, j, open_cut)
 
   Use vardef, only : srf_grid_type, options_type
   
@@ -306,8 +336,9 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
   type(options_type), intent(in) :: options
   double precision, dimension(:), intent(in) :: area
   integer, intent(in) :: j
+  logical, intent(in) :: open_cut
 
-  integer :: i, imax, iindex, iimax
+  integer :: i, imax, iindex, iimax, ilast
   double precision :: eps_scale, epsi, epse, alfa, Bdet 
   double precision, dimension(2,2) :: A, B, Binv, C, Bl1, Bl2, Bl3
   double precision, dimension(2) :: fvec, rhsvec1, rhsvec2, rhsvec3 
@@ -321,8 +352,10 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
   RHS(:) = 0.d0
   fvec(:) = 0.d0
   iimax = 2*imax - 2
+  ilast = imax - 1
+  if (open_cut) ilast = imax
 
-  do i = 1, imax - 1
+  do i = 1, ilast
 
 !   Position in matrices
 
@@ -386,10 +419,10 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
 
 !       Constant plane boundary: Delx = 0, Dely(i=1) = Dely(i=2)
 !
-!       (XCUT variant, options%nwake == 0: for now this keeps the original,
-!       unpinned relative-offset treatment at i=1/imax -- see the RHS branch
-!       below for the not-yet-active hook to reintroduce a softer, damped
-!       pull toward the trailing-edge x-location instead of a hard clamp.)
+!       (XCUT variant, options%nwake == 0: keeps this relative-offset
+!       treatment at i=1, plus the optional damped xdamp pull in the RHS
+!       branch below. With an open cut, i=imax gets the same treatment
+!       relative to imax-1 instead of mirroring i=1.)
 
         if (i == 1) then
 
@@ -402,9 +435,23 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
           Bl3(2,2) = -1.d0
           LHS(iindex:iindex+1,iindex+2:iindex+3) = Bl3
 
+!       Open cut: i = imax is the mirror of the i = 1 row, a constant-offset
+!       copy of its own neighbor column imax-1 (no link to i = 1)
+
+        elseif (i == imax) then
+
+          Bl2(1,1) = 1.d0
+          Bl2(1,2) = 0.d0
+          Bl2(2,1) = 0.d0
+          Bl2(2,2) = 1.d0
+          Bl1(:,:) = 0.d0
+          Bl1(1,1) = -1.d0
+          Bl1(2,2) = -1.d0
+          LHS(iindex:iindex+1,iindex-2:iindex-1) = Bl1
+
 !       y(imax) = -y(1)
 
-        elseif (i == imax - 1) then
+        elseif (i == imax - 1 .and. .not. open_cut) then
 
           LHS(iindex:iindex+1,iindex-2:iindex-1) = Bl1
           Bl3(1,2) = -Bl3(1,2)
@@ -495,7 +542,23 @@ subroutine hyperbolic_system(LHS, RHS, grid, options, area, j)
           rhsvec3(:) = 0.d0
           fvec(:) = 0.d0
 
-        elseif (i == imax - 1) then
+!       Open cut: same constant-offset row at i = imax, relative to imax-1,
+!       with the same decaying xdamp pull toward its own wall x-location
+
+        elseif (i == imax) then
+
+          rhsvec1(1) = rhsvec1(1) - grid%x(imax-1,j)
+          if (options%xdamp > 0.d0) then
+            rhsvec1(1) = rhsvec1(1) - options%xdamp *                         &
+                         exp(-4.d0*dble(j-1)/dble(grid%jmax-1)) *             &
+                         (grid%x(i,j) - grid%x(imax,1))
+          end if
+          rhsvec1(2) = rhsvec1(2) - grid%y(imax-1,j)
+          rhsvec2(:) = 0.d0
+          rhsvec3(:) = 0.d0
+          fvec(:) = 0.d0
+
+        elseif (i == imax - 1 .and. .not. open_cut) then
 
           rhsvec2(1) = grid%x(1,j) - 2.d0*grid%x(i,j) + grid%x(i-1,j)
           rhsvec2(2) = -grid%y(1,j) - 2.d0*grid%y(i,j) + grid%y(i-1,j)
@@ -528,7 +591,8 @@ end subroutine hyperbolic_system
 ! the grid structure
 !
 !=============================================================================80
-subroutine solve_hyperbolic_system(grid, LHS, RHS, j, imax, topology)
+subroutine solve_hyperbolic_system(grid, LHS, RHS, j, imax, topology,      &
+                                   open_cut)
 
   Use vardef,    only : srf_grid_type
   Use math_deps, only : lmult
@@ -538,23 +602,30 @@ subroutine solve_hyperbolic_system(grid, LHS, RHS, j, imax, topology)
   double precision, dimension(:), intent(in) :: RHS
   integer, intent(in) :: j, imax
   character(*), intent(in) :: topology
+  logical, intent(in) :: open_cut
 
   double precision, dimension(size(RHS,1)) :: slnvec
-  integer :: i, iindex
+  integer :: i, iindex, ilast
 
 ! Solve (nearly) block tridiagonal system
 
   slnvec = lmult(LHS, RHS)
 
-! Put x and y back into grid structure
+! Put x and y back into grid structure (with an open cut, i = imax was
+! solved for directly)
 
-  do i = 1, imax - 1
+  ilast = imax - 1
+  if (open_cut) ilast = imax
+
+  do i = 1, ilast
 
     iindex = 2*(i-1) + 1
     grid%x(i,j+1) = slnvec(iindex)
     grid%y(i,j+1) = slnvec(iindex+1)
 
   end do
+
+  if (open_cut) return
 
   grid%x(imax,j+1) = grid%x(1,j+1)
   if (trim(topology) == 'OGRD') then

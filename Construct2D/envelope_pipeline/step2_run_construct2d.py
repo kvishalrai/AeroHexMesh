@@ -67,12 +67,19 @@ def main():
                     help='XCUT pull of the cut columns toward the TE x-location')
     args = ap.parse_args()
 
+    curve = read_curve_dat(args.curve)
+    open_curve = not np.array_equal(curve[0], curve[-1])
+
+    # For an open curve Construct2D's .nmf is not usable as-is: it still
+    # welds i=1 to i=imax with a ONE_TO_ONE (two distinct points here) and
+    # marks the whole j=1 row VISCOUS, lines and bridges included. Keep it
+    # under a name that says so; the real .nmf is written by the merge step.
+    nmf_ext = '_c2d_raw.nmf' if open_curve else '.nmf'
     out = {k: args.out_prefix + ext for k, ext in
-           (('p3d', '.p3d'), ('nmf', '.nmf'), ('stats', '_stats.p3d'),
+           (('p3d', '.p3d'), ('nmf', nmf_ext), ('stats', '_stats.p3d'),
             ('meta', '.meta.json'), ('log', '.log'))}
     refuse_existing(*out.values())
 
-    curve = read_curve_dat(args.curve)
     meta_in = os.path.splitext(args.curve)[0] + '.meta.json'
     meta = read_meta(meta_in) if os.path.exists(meta_in) else {}
     exe = os.path.abspath(args.construct2d)
@@ -155,12 +162,21 @@ def main():
         'imax': int(imax), 'jmax': int(jmax),
         'n_folded_cells': int(len(bad)),
         'first_cell_height': float(np.hypot(x[:, 1] - x[:, 0], y[:, 1] - y[:, 0]).min()),
-        'p3d': out['p3d'], 'nmf': out['nmf'], 'stats_p3d': out['stats'],
+        'p3d': out['p3d'], 'stats_p3d': out['stats'],
+        'nmf': None if open_curve else out['nmf'],
+        'construct2d_raw_nmf': out['nmf'],
+        'nmf_note': ("open curve: Construct2D's nmf welds i=1 to i=imax and marks "
+                     "all of j=1 VISCOUS, so it is kept only as *_c2d_raw.nmf; "
+                     "the merge step writes the real one") if open_curve else None,
         'failures': failures,
     })
     write_meta(out['meta'], meta)
     for k in ('p3d', 'nmf', 'stats', 'meta', 'log'):
         print(f"Wrote {out[k]}")
+    if open_curve:
+        print("NOTE: open curve, so Construct2D's .nmf (kept as *_c2d_raw.nmf) "
+              "is not valid: it welds i=1 to i=imax. The merge step writes the "
+              "real .nmf.")
     if failures:
         print("\nFAILED:")
         for f_ in failures:

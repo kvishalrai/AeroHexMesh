@@ -16,6 +16,12 @@ Given the user's raw airfoil geometry, this:
   - closes the whole curve with a single shared point at (Lfar, 0.0)
     as both the first and last point of the array, which is what makes
     Construct2D see a *closed* curve (tegap=False) and unlocks BUFF.
+    With --open, that closure point is left out: the curve starts and
+    ends at the two wake-line tips, and step 3 runs with --nelm-clean 0
+    (nothing degenerate to trim). This needs this repo's Construct2D
+    (XCUT build with the open-cut fix in hyperbolic_surface_grid.f90),
+    which marches the two wake-tip columns independently; Construct2D
+    asks once to confirm CGRD for the open curve -- answer y.
 
 Usage:
     python3 step1_build_curve.py \\
@@ -111,6 +117,10 @@ def main():
                           "fraction of the wake length) -- ~1.0 gives a gentle sag with "
                           "no overshoot; increase for a longer, more gradual turn, "
                           "decrease for a tighter one hugging the TE angle")
+    ap.add_argument('--open', action='store_true',
+                     help="leave out the (Lfar, 0.0) closure point, so the curve "
+                          "ends at the two wake-line tips; then run step 3 with "
+                          "--nelm-clean 0 (needs this repo's open-cut Construct2D)")
     ap.add_argument('--out', required=True, help='output .dat path')
     args = ap.parse_args()
 
@@ -203,13 +213,19 @@ def main():
     # top wake ordered near->far; EXCLUDE its near-TE point (shared with xc[-1])
     top_near_to_far = top_wake[1:]
 
-    curve = np.vstack([close_pt, bot_far_to_near,
-                        np.column_stack([xc, yc]),
-                        top_near_to_far, close_pt])
+    if args.open:
+        curve = np.vstack([bot_far_to_near,
+                            np.column_stack([xc, yc]),
+                            top_near_to_far])
+    else:
+        curve = np.vstack([close_pt, bot_far_to_near,
+                            np.column_stack([xc, yc]),
+                            top_near_to_far, close_pt])
 
     n_total = len(curve)
-    i_bot_te = args.nwake + 1          # 1-based index of bottomTE in the raw curve
-    i_top_te = args.nwake + n_af       # 1-based index of topTE in the raw curve
+    shift = 1 if args.open else 0
+    i_bot_te = args.nwake + 1 - shift          # 1-based index of bottomTE in the raw curve
+    i_top_te = args.nwake + n_af - shift       # 1-based index of topTE in the raw curve
     print(f"assembled curve: {n_total} points "
           f"(bottomTE at i={i_bot_te}, topTE at i={i_top_te}, 1-based)")
 
@@ -226,6 +242,7 @@ def main():
         h=h,
         d0=d0,
         n_total=n_total,
+        open=args.open,
         i_bot_te_raw=i_bot_te,
         i_top_te_raw=i_top_te,
         curve_path=args.out,
@@ -235,6 +252,9 @@ def main():
     print()
     print("Next: load this curve in Construct2D and run CGRD + NWKE=0 + BUFF "
           "to generate the raw p3d/nmf (step 2, done by you interactively).")
+    if args.open:
+        print("Open curve: answer y when Construct2D asks to confirm CGRD, and "
+              "run step 3 with --nelm-clean 0.")
 
 
 if __name__ == '__main__':

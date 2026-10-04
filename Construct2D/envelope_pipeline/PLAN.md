@@ -34,22 +34,36 @@ python3 step3_check_mesh.py --meta <dir>/30p30n_env_v1_c2d.meta.json \
 
 Result with the defaults (JMAX=100, RADI=15, YPLS=1, RECD=1.7e6): a 696 × 100
 mesh with 0 folded cells, the wall row bit-identical to the curve, and a worst
-cell angle of 41°. Step 3 still fails one gate: xi-growth reaches 1.25–1.45.
+cell angle of 41°. The same holds with `--far-end free` and the fixed
+Construct2D (lines ending near y=-0.52, 0 folded cells, worst angle 41.6°). Step 3 still fails one gate: xi-growth reaches 1.25–1.45.
 The worst values are in the outer field (j ≈ 80–90); near the walls (j ≤ 30)
 the worst is 1.24, on the lower downstream line just off the flap TE. The
 wall row itself has ratios up to 1.16, inherited from the raw spacing.
 
 What the first runs found (now built into the scripts):
 
-- **C10 The far ends must be mirror images about y=0.** Construct2D's
-  C-grid hyperbolic marcher solves only i=1..imax-1 and sets column imax to
-  the mirror of column 1 at every level (`x(imax)=x(1)`, `y(imax)=-y(1)` in
-  `solve_hyperbolic_system`). The XCUT patch did not change this, and OAT15
-  hid it because its cut sat on y=0. With the downstream lines ending near
-  y=-0.52, the first run had 703 folded cells along the lower line.
-  Step 1 now turns the centerline back onto y=0 and ends the lines at exactly
-  (xfar, ∓h). The proper fix is to march i=1 and i=imax independently in the
-  Fortran when NWKE=0; until then, C10 holds.
+- **C10 Open cut: fixed in Construct2D.** The C-grid hyperbolic marcher
+  solved only i=1..imax-1 and set column imax to the mirror of column 1 about
+  y=0 at every level (`x(imax)=x(1)`, `y(imax)=-y(1)`). The XCUT patch did not
+  change this, and OAT15 hid it because its cut sat on y=0. With the
+  downstream lines ending near y=-0.52, the first run had 703 folded cells.
+  `hyperbolic_surface_grid.f90` now marches i=1 and i=imax independently
+  when the curve is open (CGRD, NWKE=0, two distinct end points). Each end
+  column is a constant-offset copy of its own neighbour column, with the
+  same optional XDAMP pull. Checked: the closed OAT15 XCUT curve gives a
+  byte-identical mesh to before; the envelope with lines ending near y=-0.52
+  now has 0 folded cells. Step 1's `--far-end free` (default) relies on the
+  fix. `--far-end mirror` keeps the old y=0 shape for builds without it.
+- **Open curves for OAT15 too.** xcut step 1 has `--open` (no closure point),
+  and xcut steps 3–5 then run with `--nelm-clean 0`. Compared with
+  closed-then-trimmed, the near-wall mesh is the same (within 3e-5 for
+  j ≤ 20). The outflow cut columns stay nearly vertical (x drift 0.01–0.10
+  against 1.5), and the worst cell angle in the five columns at each end is
+  87° against 81°.
+- **Construct2D's .nmf is wrong for an open curve.** It still welds i=1 to
+  i=imax with a ONE_TO_ONE and marks all of j=1 VISCOUS. Step 2 keeps it
+  only as `*_c2d_raw.nmf`. The real one comes from the merge step, as in
+  xcut step 3/5.
 - **Construct2D asks y/n** before accepting a C-grid for an open curve (an
   open curve looks like a blunt TE). Step 2 answers `y`. All other settings
   go through `grid_options.in`, with `topo='CGRD'` set explicitly.
@@ -119,8 +133,7 @@ of the upper downstream line**.
   upper bridge → flap upper surface → flap upper TE corner → upper downstream
   line.
 - **Downstream end: left open.** The two downstream lines end apart. They
-  start at the flap TE corners (gap 0.00588) and end as mirror images about
-  y=0 (C10). They are not joined. The XCUT variant accepts this, and it is
+  start at the flap TE corners (gap 0.00588) and are not joined. The XCUT variant accepts this, and it is
   the same layout as the OAT15 TE box. Earlier drafts closed the far ends
   with a short segment; the open end is simpler and needs no trim.
 
@@ -290,11 +303,14 @@ block.
 
 - Smooth, near-parallel, ending in a straight far section (user requirement).
 - **Downstream pair:** attaches at the two flap TE corners. Build it as one
-  centerline plus an offset, starting along the flap TE bisector. Both lines
-  share the centerline's point distribution exactly. The centerline turns
-  back onto y=0 (`--turn-length`, default 2.0) and runs straight along y=0 to
-  `--xfar`. The offset rotates smoothly from half the TE gap vector to
-  (0, ±h), so the far ends are exact mirror images (C10). Ends open.
+  centerline from the flap TE midpoint along the TE bisector, a Hermite turn
+  (`--turn-length`) onto a straight far section, and straight on to
+  `--xfar`. Both lines share the centerline's point distribution exactly.
+  `--far-end free` (default): the far section runs at `--far-angle`, and the
+  lines are exact ±(TE gap)/2 translates of the centerline. `--far-end
+  mirror`: the far section runs along y=0, and the offset rotates to (0, ±h),
+  so the far ends are mirror images about y=0 (for builds without C10's
+  fix). Ends open.
 
 ## Constraints step 1 must respect so the later steps work
 
