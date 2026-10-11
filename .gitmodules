@@ -8,3 +8,7 @@
 [submodule "Construct2D_to_NEKRS/CFD_code/nekRS"]
 	path = CFD_solvers/nekRS
 	url = https://github.com/Nek5000/nekRS.git
+[submodule "CFD_solvers/STREAmS-2"]
+	path = CFD_solvers/STREAmS-2
+	url = https://github.com/kvishalrai/STREAmS-2.git
+	branch = aerohexmesh
