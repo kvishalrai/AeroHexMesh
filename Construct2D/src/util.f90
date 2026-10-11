@@ -389,7 +389,7 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') grid%x(i,j)
+      write(iunit,'(es25.16)') grid%x(i,j)
     end do
     end do
     end do
@@ -397,7 +397,7 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') dble(k-1)*deltplane
+      write(iunit,'(es25.16)') dble(k-1)*deltplane
     end do
     end do
     end do
@@ -405,14 +405,14 @@ subroutine write_srf_grid(iunit, grid, griddim, nplanes, deltplane)
     do j = 1, jmax
     do k = 1, kmax
     do i = imax, 1, -1
-      write(iunit,'(es17.8)') grid%y(i,j)
+      write(iunit,'(es25.16)') grid%y(i,j)
     end do
     end do
     end do
 
   else
 
-    write(iunit,'(es17.8)')                                                    &
+    write(iunit,'(es25.16)')                                                   &
          ((grid%x(i,j), i=imax,1,-1), j=1,jmax),                               &
          ((grid%y(i,j), i=imax,1,-1), j=1,jmax),                               &
          ((0.0, i=imax,1,-1), j=1,jmax)

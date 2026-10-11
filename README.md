@@ -37,22 +37,25 @@ behind every algorithm and how it's implemented, see
 | `Construct2D/` | Shared, vendored 2D grid generator, designed for airfoils but usable for other closed-curve geometries too (source + Windows binary). See its own [README](Construct2D/README.md) and [Credits](#credits). |
 | `Construct2D_to_SOD2D/` | 2D grid → smoothed high-order mesh for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](Construct2D_to_SOD2D/README.md). |
 | `Construct2D_to_NEKRS/` | 2D grid → smoothed, spanwise-periodic 3D mesh for [NekRS](https://github.com/Nek5000/nekRS). See its own [README](Construct2D_to_NEKRS/README.md). |
+| `Construct2D_to_STREAmS/` | 2D C-grid → `grid2d.xyz` for the structured finite-difference solver [STREAmS-2](https://github.com/STREAmS-CFD/STREAmS-2) (curvilinear airfoil setup). See its own [README](Construct2D_to_STREAmS/README.md). |
 | `pyHyp/` | 3D surface mesh → volume mesh by hyperbolic extrusion, for real (tapered/swept) 3D shapes rather than a spanwise-extruded 2D section. See its own [README](pyHyp/README.md). |
 | `etaGrid_to_SOD2D/` | Arbitrary YZ cross-section mesh, swept around an airfoil curve (not just spanwise-translated) and into a C-grid wake, for [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab). See its own [README](etaGrid_to_SOD2D/README.md). |
-| `CFD_solvers/` | The CFD solver git submodules (SOD2D, Nek5000, NekRS) themselves, shared across every pipeline above that targets that solver — not a pipeline of its own. See [Credits](#credits) for what's included and where. |
+| `CFD_solvers/` | The CFD solver git submodules (SOD2D, Nek5000, NekRS, STREAmS-2) themselves, shared across every pipeline above that targets that solver — not a pipeline of its own. See [Credits](#credits) for what's included and where. |
 
 Additional `Construct2D_to_<SOLVER>/` pipelines may be added following the
 same pattern.
 
 ## CFD Solvers
 
-This framework builds meshes for these spectral-element CFD codes:
+This framework builds meshes for these spectral-element CFD codes, and
+grids for the finite-difference code STREAmS-2:
 
 | Code | What it is | Docs | Paper |
 |---|---|---|---|
 | [SOD2D](https://gitlab.com/bsc_sod2d/sod2d_gitlab) | Incompressible & compressible (high-Mach); GPU-accelerated (BSC) | [Wiki](https://gitlab.com/bsc_sod2d/sod2d_gitlab/-/wikis/home) | [Gasparino et al. 2024](https://doi.org/10.1016/j.cpc.2023.109067) |
 | [Nek5000](https://github.com/Nek5000/Nek5000) | Incompressible & low-Mach; CPU-based (ANL) | [Docs](https://nek5000.github.io/NekDoc/) | [Fischer 1997](https://doi.org/10.1006/jcph.1997.5651) |
 | [NekRS](https://github.com/Nek5000/nekRS) | Incompressible & low-Mach; GPU-oriented successor to Nek5000 (ANL/UIUC/PSU) | [Docs](https://nekrsdoc.readthedocs.io/en/latest/) | [Fischer et al. 2021](https://arxiv.org/abs/2104.05829) |
+| [STREAmS-2](https://github.com/STREAmS-CFD/STREAmS-2) | Compressible, structured finite differences; GPU-accelerated (Sapienza / CINECA) | [Docs](https://streams-cfd.github.io/STREAmS-2/) | [Bernardini et al. 2023](https://doi.org/10.1016/j.cpc.2022.108644) |
 
 ## Getting the code
 
@@ -141,6 +144,20 @@ authors:
 - **[p3d2nek](https://github.com/yslan/p3d2nek)** (YuHsiang Lan, Argonne
   National Laboratory) — a MATLAB-based alternative to this pipeline's
   Python/Gmsh-based `p3d_to_gmsh_nek.py` + `gmsh2nek` route.
+
+### `Construct2D_to_STREAmS/` pipeline
+
+- **[STREAmS-2](https://github.com/STREAmS-CFD/STREAmS-2)** — M. Bernardini,
+  D. Modesti, F. Salvadore, S. Sathyanarayana, G. Della Posta and
+  S. Pirozzoli, GPLv3. Included as the
+  [`CFD_solvers/STREAmS-2`](CFD_solvers) git submodule, pointing to the
+  fork [kvishalrai/STREAmS-2](https://github.com/kvishalrai/STREAmS-2)
+  (branch `aerohexmesh`), which adds an adiabatic airfoil wall, a
+  configurable runtime-forces interval and MareNostrum 5 build
+  templates — see
+  [`Construct2D_to_STREAmS/README.md`](Construct2D_to_STREAmS/README.md#cfd_solversstreams-2).
+- `p3d_to_streams.py` orients the grid following the layout of
+  STREAmS-2's own `examples/airfoil_*` grids.
 
 ### `pyHyp/` pipeline
 
@@ -243,7 +260,8 @@ Code original to this repository is released under the MIT License (see
 [`LICENSE`](LICENSE)). Vendored components keep their own upstream licenses
 as noted above and in their respective directories: `Construct2D/` is
 GPLv3 (see `Construct2D/license/gpl.txt`), the `sod2d_gitlab` submodule is
-MIT (see its own `LICENSE`), and the `Nek5000`/`nekRS` submodules are
+MIT (see its own `LICENSE`), the `STREAmS-2` submodule is GPLv3 (see its own
+`LICENSE`), and the `Nek5000`/`nekRS` submodules are
 BSD-3-Clause-style (Copyright © UChicago Argonne, LLC; see their own
 `LICENSE` files). These are separate programs used as pipeline stages, not
 statically combined into one binary.

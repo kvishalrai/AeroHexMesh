@@ -22,7 +22,7 @@ C  Original copyright (C) 2000 Mark Drela (original XFoil code)
 
       SUBROUTINE SPLIND(X,XS,S,N,XS1,XS2)
       DIMENSION X(N),XS(N),S(N)
-      PARAMETER (NMAX=1000)
+      PARAMETER (NMAX=20000)
       DIMENSION  A(NMAX),B(NMAX),C(NMAX)
 C-------------------------------------------------------
 C     Calculates spline coefficients for X(S).          |
@@ -378,7 +378,7 @@ C     top side and at x=XPREF on bottom side
 C     by setting a fictitious local curvature of
 C     CTRRAT*(LE curvature) there.
 C---------------------------------------------------
-      PARAMETER (IQX=1000)
+      PARAMETER (IQX=5000)
       PARAMETER (IBX=4*IQX)
       PARAMETER (IWX=IQX/8+2)
       PARAMETER (IZX=IQX+IWX)

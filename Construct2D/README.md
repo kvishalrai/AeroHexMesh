@@ -26,6 +26,14 @@ addition: `generate_grid_previews.py`, used to make the images on this page.
 The original upstream `README` (plain text) is kept alongside this one
 unmodified; this file is just a friendlier front door for browsing the repo.
 
+Two local changes are needed by `Construct2D_to_STREAmS/` (fine grids):
+
+- `src/xfoil_deps.f`: spline work-array limits raised (`NMAX` 1000 → 20000,
+  `IQX` 1000 → 5000), so airfoil files with more than 1000 points load.
+- `src/util.f90`: grid coordinates written as `es25.16` instead of
+  `es17.8` (16 instead of 8 significant digits), so wall spacings of
+  ~1e-4 chord and the wake cut survive the ASCII round trip.
+
 ## Building
 
 ```bash

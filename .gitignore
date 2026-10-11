@@ -70,6 +70,13 @@ wall_coords_*.dat
 # etaGrid_to_SOD2D/README.md -- to be replaced with a repaired version.
 !/etaGrid_to_SOD2D/examples/airfoil.msh
 
+# Construct2D_to_STREAmS/: generated grids and Construct2D output in the
+# example cases -- regenerate with generate_grid.sh.
+/Construct2D_to_STREAmS/examples/*/*.p3d
+/Construct2D_to_STREAmS/examples/*/*.nmf
+/Construct2D_to_STREAmS/examples/*/grid2d.xyz
+/Construct2D/build.log
+
 # Vendored/compiled binaries (rebuild from source)
 /Construct2D/construct2d
 /Construct2D/bin/x86_64/Linux/construct2d
