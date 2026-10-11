@@ -1,0 +1,33 @@
+&SOPT
+  nsrf = 1200
+  lesp = 5.0d-4
+  tesp = 6.0d-4
+  radi = 100.0d0
+  nwke = 300
+  fdst = 1.0d0
+  fwkl = 1.0d0
+  fwki = 10.0d0
+/
+&VOPT
+  name = 'naca0012_re23k'
+  jmax = 512
+  slvr = 'HYPR'
+  topo = 'CGRD'
+  ypls = 0.220895d0
+  recd = 23000.0d0
+  stp1 = 1000
+  stp2 = 20
+  nrmt = 1
+  nrmb = 1
+  alfa = 1.0d0
+  epsi = 15.0d0
+  epse = 0.0d0
+  funi = 0.2d0
+  asmt = 20
+  cfrc = 1.0d0
+/
+&OOPT
+  gdim = 2
+  npln = 1
+  dpln = 1.0d0
+/
