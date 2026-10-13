@@ -21,6 +21,7 @@ from mesh_extrusion import (
     sod2d_mesh,
     write_ext_nmf,
     write_geo_file,
+    complete_periodic_links,
     write_partition_input_json,
     read_plot3d_2d_multiblock,
     PERIODIC_ID,
@@ -214,6 +215,12 @@ set -e
 gmsh airfoil_per.geo -0
 """,
             work_dir,
+        )
+
+        # Link the spanwise planes' edge nodes too (Gmsh leaves them out).
+        complete_periodic_links(
+            work_dir / f"{airfoil_name}_per.msh",
+            sod2d_config["z_spanwise_len"],
         )
 
         # Convert the Gmsh mesh to the SOD2D HDF5 format.

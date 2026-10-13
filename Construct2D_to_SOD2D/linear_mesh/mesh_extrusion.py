@@ -467,7 +467,105 @@ def write_geo_file(airfoil_file, work_dir, span_z, porder, groups):
         f.write(geo_text)
 
     print("Wrote airfoil_per.geo")
-    
+
+
+def complete_periodic_links(msh_file, span_z):
+    """Rewrite the $Periodic section of a Gmsh 2.2 file so it links EVERY
+    node of the k=kmax plane to its k=0 twin.
+
+    The mesh is merged into Gmsh as discrete entities, so the two spanwise
+    surfaces have no boundary curves: Gmsh's "Periodic Surface ...
+    Translate" only links nodes classified on the surfaces themselves and
+    leaves out the edge lines where they meet WALL/INLET/OUTLET.
+    CreateTopology can't fix that either -- it seeds each closed wall loop
+    at an arbitrary, different node on each plane and Gmsh then aborts the
+    periodic connection. So the full list is rebuilt here by matching the
+    two planes' nodes on (x, y).
+
+    Links keep Gmsh's own convention: "slave master", slave on z=span_z
+    (surface k=kmax), master on z=0. Every link Gmsh already wrote must
+    agree with the rebuilt list, and every plane node must find exactly
+    one twin, otherwise this raises.
+    """
+    msh_file = Path(msh_file)
+    tol = 1e-6 * span_z
+
+    # Pass 1: plane nodes (id, x, y) on z=0 and z=span_z, plus the
+    # existing $Periodic header and links.
+    ids0, xy0, idsL, xyL = [], [], [], []
+    header, old_links = None, []
+    with open(msh_file) as f:
+        line = f.readline()
+        while line:
+            tag = line.strip()
+            if tag == "$Nodes":
+                nnodes = int(f.readline())
+                left = nnodes
+                while left > 0:
+                    chunk = [f.readline() for _ in range(min(left, 1_000_000))]
+                    a = np.array(" ".join(chunk).split(), dtype=float).reshape(-1, 4)
+                    on0 = np.abs(a[:, 3]) < tol
+                    onL = np.abs(a[:, 3] - span_z) < tol
+                    ids0.append(a[on0, 0].astype(np.int64)); xy0.append(a[on0, 1:3])
+                    idsL.append(a[onL, 0].astype(np.int64)); xyL.append(a[onL, 1:3])
+                    left -= len(chunk)
+            elif tag == "$Periodic":
+                if int(f.readline()) != 1:
+                    raise ValueError("Expected a single periodic entity in $Periodic")
+                entity = f.readline()
+                affine = f.readline()
+                if not affine.startswith("Affine"):
+                    raise ValueError("Expected an Affine line in $Periodic")
+                nlinks = int(f.readline())
+                old_links = np.array(
+                    " ".join(f.readline() for _ in range(nlinks)).split(), dtype=np.int64
+                ).reshape(-1, 2)
+                header = (entity, affine)
+            line = f.readline()
+    if header is None:
+        raise ValueError(f"No $Periodic section in {msh_file}")
+
+    ids0 = np.concatenate(ids0); xy0 = np.vstack(xy0)
+    idsL = np.concatenate(idsL); xyL = np.vstack(xyL)
+    if len(ids0) != len(idsL):
+        raise ValueError(f"Plane node counts differ: z=0 {len(ids0)}, z=span {len(idsL)}")
+
+    # Match on (x, y): sort both planes the same way and compare row by row.
+    o0 = np.lexsort((xy0[:, 1], xy0[:, 0]))
+    oL = np.lexsort((xyL[:, 1], xyL[:, 0]))
+    gap = np.abs(xyL[oL] - xy0[o0]).max()
+    if gap > tol:
+        raise ValueError(f"z=0 and z=span planes don't match node for node (max gap {gap:.3e})")
+    if len(np.unique(ids0)) != len(ids0):
+        raise ValueError("Duplicate node ids on the z=0 plane")
+    links = np.column_stack((idsL[oL], ids0[o0]))
+
+    # Every link Gmsh found must be one of ours.
+    twin = dict(zip(links[:, 0].tolist(), links[:, 1].tolist()))
+    wrong = sum(twin.get(s) != m for s, m in old_links.tolist())
+    if wrong:
+        raise ValueError(f"{wrong} Gmsh periodic links disagree with coordinate matching")
+
+    # Pass 2: copy the file, replacing the $Periodic section.
+    tmp = msh_file.with_suffix(".msh.tmp")
+    with open(msh_file) as fin, open(tmp, "w") as fout:
+        skip = False
+        for line in fin:
+            tag = line.strip()
+            if tag == "$Periodic":
+                skip = True
+                fout.write("$Periodic\n1\n" + header[0] + header[1] + f"{len(links)}\n")
+                np.savetxt(fout, links, fmt="%d")
+                fout.write("$EndPeriodic\n")
+            elif tag == "$EndPeriodic":
+                skip = False
+            elif not skip:
+                fout.write(line)
+    tmp.replace(msh_file)
+
+    print(f"Periodic links: {len(old_links)} from Gmsh, {len(links)} after adding "
+          f"{len(links) - len(old_links)} edge nodes (all {len(ids0)} plane nodes linked)")
+
 def write_partition_input_json(base_name, work_dir, n_partitions):
 
     input_data = {
