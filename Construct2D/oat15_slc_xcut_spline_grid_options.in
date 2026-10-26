@@ -1,0 +1,32 @@
+Construct2D settings for the OAT15 XCUT meshes (xcut_pipeline step 2).
+Confirmed: they reproduce oat15_slc_xcut_spline.p3d byte for byte.
+run_pipeline.sh copies this file to grid_options.in in a temporary run
+folder, so the file name here is free and no grid_options.in is needed.
+Do NOT set name: the output files are named after the loaded .dat, i.e.
+MESH_NAME in run_pipeline.sh, which is then the only place to change it.
+(The GRID -> BUFF choice is a menu answer, not a setting; the pipeline
+types it.)  YPLS/RECD/CFRC only enter through the first-cell height
+(3.3808e-4 here); YPLS 40 with CFRC 1 gives the same mesh.
+
+&SOPT
+  radi = 40.0
+  nwke = 0
+/
+&VOPT
+  jmax = 65
+  slvr = 'HYPR'
+  topo = 'CGRD'
+  ypls = 80.0
+  recd = 3.0e6
+  cfrc = 0.5
+  alfa = 1.0
+  epsi = 15.0
+  epse = 0.0
+  funi = 0.2
+  asmt = 20
+/
+&OOPT
+  gdim = 2
+  npln = 2
+  dpln = 1.0
+/
